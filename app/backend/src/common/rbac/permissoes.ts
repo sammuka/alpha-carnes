@@ -98,6 +98,19 @@ export const PERMISSOES = {
   ESPELHO_COMERCIAL_LER: 'ESPELHO_COMERCIAL_LER',
   PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
   OCORRENCIA_PRECO_CIENTE: 'OCORRENCIA_PRECO_CIENTE',
+  FISCAL_EMPRESAS_LER: 'FISCAL_EMPRESAS_LER',
+  FISCAL_EMPRESAS_GERENCIAR: 'FISCAL_EMPRESAS_GERENCIAR',
+  FISCAL_EMPRESAS_APROVAR: 'FISCAL_EMPRESAS_APROVAR',
+  FISCAL_ENQUADRAMENTOS_LER: 'FISCAL_ENQUADRAMENTOS_LER',
+  FISCAL_ENQUADRAMENTOS_GERENCIAR: 'FISCAL_ENQUADRAMENTOS_GERENCIAR',
+  FISCAL_REGRAS_LER: 'FISCAL_REGRAS_LER',
+  FISCAL_REGRAS_GERENCIAR: 'FISCAL_REGRAS_GERENCIAR',
+  FISCAL_REGRAS_APROVAR: 'FISCAL_REGRAS_APROVAR',
+  FISCAL_SIMULACOES_LER: 'FISCAL_SIMULACOES_LER',
+  FISCAL_SIMULACOES_GERENCIAR: 'FISCAL_SIMULACOES_GERENCIAR',
+  FISCAL_HOMOLOGACOES_LER: 'FISCAL_HOMOLOGACOES_LER',
+  FISCAL_HOMOLOGACOES_GERENCIAR: 'FISCAL_HOMOLOGACOES_GERENCIAR',
+  FISCAL_HOMOLOGACOES_APROVAR: 'FISCAL_HOMOLOGACOES_APROVAR',
   CONTABILIDADE_PLANO_LER: 'CONTABILIDADE_PLANO_LER',
   CONTABILIDADE_PLANO_GERENCIAR: 'CONTABILIDADE_PLANO_GERENCIAR',
   CONTABILIDADE_POLITICA_LER: 'CONTABILIDADE_POLITICA_LER',
@@ -410,6 +423,25 @@ pushPermissoes('diretoria', 'FATURAMENTO_LER');
 pushPermissoes('administrador', 'CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR');
 pushPermissoes('administrador', 'CONTABILIDADE_POLITICA_LER', 'CONTABILIDADE_POLITICA_GERENCIAR');
 
+// E01-T01 — cadastro fiscal de empresas/estabelecimentos/regime: só administrador (AD-04; AD-18 (5)
+// personas não viram perfis). Demais perfis dependem da decisão H-E01-02 (parâmetro
+// fiscal.empresas_perfis_autorizados + badge Provisório); edição runtime em /admin/perfis.
+pushPermissoes('administrador', 'FISCAL_EMPRESAS_LER', 'FISCAL_EMPRESAS_GERENCIAR', 'FISCAL_EMPRESAS_APROVAR');
+// E01-T02 — operações fiscais e enquadramentos: só administrador (AD-04; AD-18 (5);
+// personas não viram perfis). Demais perfis = H-E01-12. Sem FISCAL_ENQUADRAMENTOS_APROVAR.
+pushPermissoes('administrador', 'FISCAL_ENQUADRAMENTOS_LER', 'FISCAL_ENQUADRAMENTOS_GERENCIAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona fiscal/contador não é perfil.
+pushPermissoes('administrador', 'FISCAL_REGRAS_LER', 'FISCAL_REGRAS_GERENCIAR', 'FISCAL_REGRAS_APROVAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona fiscal/contador não é perfil.
+pushPermissoes('administrador', 'FISCAL_SIMULACOES_LER', 'FISCAL_SIMULACOES_GERENCIAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona contador e auditor não é perfil.
+pushPermissoes(
+  'administrador',
+  'FISCAL_HOMOLOGACOES_LER',
+  'FISCAL_HOMOLOGACOES_GERENCIAR',
+  'FISCAL_HOMOLOGACOES_APROVAR',
+);
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -487,6 +519,21 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
   PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
   OCORRENCIA_PRECO_CIENTE: 'Marcar como ciente uma ocorrência informativa de ajuste de preço',
+  FISCAL_EMPRESAS_LER: 'Consultar empresas, estabelecimentos, CNAEs e regimes',
+  FISCAL_EMPRESAS_GERENCIAR:
+    'Cadastrar, editar, submeter e remover empresas, estabelecimentos, CNAEs, alterações e regimes',
+  FISCAL_EMPRESAS_APROVAR: 'Aprovar, rejeitar e suspender cadastros, alterações e regimes fiscais',
+  FISCAL_ENQUADRAMENTOS_LER: 'Consultar operações fiscais, enquadramentos, CFOP e NCM manuais',
+  FISCAL_ENQUADRAMENTOS_GERENCIAR:
+    'Cadastrar, editar, duplicar, inativar, reativar e remover enquadramentos e códigos manuais de CFOP e NCM',
+  FISCAL_REGRAS_LER: 'Consultar regras tributárias, benefícios fiscais e classificações IBS/CBS manuais',
+  FISCAL_REGRAS_GERENCIAR: 'Criar rascunho, editar rascunho, adicionar versão, submeter e cadastrar benefício fiscal e classificação IBS/CBS',
+  FISCAL_REGRAS_APROVAR: 'Aprovar e aposentar versão de regra tributária submetida por outro usuário',
+  FISCAL_SIMULACOES_LER: 'Consultar simulações fiscais, memória de cálculo e comparação de versões',
+  FISCAL_SIMULACOES_GERENCIAR: 'Simular tributos e gravar versão nova da memória de cálculo',
+  FISCAL_HOMOLOGACOES_LER: 'Consultar o painel de alterações e homologação de regras',
+  FISCAL_HOMOLOGACOES_GERENCIAR: 'Abrir revisão de regra aprovada e vincular cenário de regressão',
+  FISCAL_HOMOLOGACOES_APROVAR: 'Aprovar, rejeitar e publicar homologação de regra submetida por outro usuário',
   CONTABILIDADE_PLANO_LER: 'Consultar plano de contas e centros de custo',
   CONTABILIDADE_PLANO_GERENCIAR: 'Criar, versionar, revisar, aprovar, bloquear e mapear o plano de contas',
   CONTABILIDADE_POLITICA_LER: 'Consultar políticas de contabilização',

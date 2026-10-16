@@ -85,6 +85,28 @@ describe('operacoes e2e', () => {
     expect(criar.status).toBe(201);
     expect(criar.body.extraordinaria).toBe(true);
 
+    const porData = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ search: '14/08/2026' })
+      .set('Cookie', gestorCookies);
+    expect(porData.status).toBe(200);
+    expect(porData.body.data.map((o: { id: string }) => o.id)).toContain(criar.body.id);
+    const porIso = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ search: '2026-08-14' })
+      .set('Cookie', gestorCookies);
+    expect(porIso.body.data.map((o: { id: string }) => o.id)).toContain(criar.body.id);
+    const porRotulo = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ search: 'extraordinária de teste' })
+      .set('Cookie', gestorCookies);
+    expect(porRotulo.body.data.map((o: { id: string }) => o.id)).toContain(criar.body.id);
+    const semResultado = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ search: 'zzz-inexistente' })
+      .set('Cookie', gestorCookies);
+    expect(semResultado.body.total).toBe(0);
+
     const duplicada = await request(app.getHttpServer())
       .post('/operacoes/extraordinaria')
       .set('Cookie', gestorCookies)

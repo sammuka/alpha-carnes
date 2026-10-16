@@ -294,6 +294,71 @@ const PARAMETROS_SEED = [
       pendencia: 'D10.2',
     },
   },
+  {
+    chave: 'fiscal.empresas_perfis_autorizados',
+    descricao: 'Perfis com acesso ao cadastro fiscal de empresas',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do cadastro fiscal de empresas',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-02',
+    },
+  },
+  {
+    chave: 'fiscal.enquadramentos_perfis_autorizados',
+    descricao: 'Perfis com acesso a operações fiscais e enquadramentos',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis de operações fiscais e enquadramentos',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
+  {
+    chave: 'fiscal.regras_perfis_autorizados',
+    descricao: 'Perfis com acesso ao editor de regras tributárias',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do editor de regras tributárias',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
+  {
+    chave: 'fiscal.simulacoes_perfis_autorizados',
+    descricao: 'Perfis com acesso ao simulador fiscal e à memória de cálculo',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do simulador fiscal',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
+  {
+    chave: 'fiscal.homologacoes_perfis_autorizados',
+    descricao: 'Perfis com acesso ao painel de alterações e homologação de regras',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do painel de alterações e homologação de regras',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
 ] as const;
 
 export async function seedParametros(db: Db): Promise<void> {

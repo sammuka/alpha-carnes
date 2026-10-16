@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { MENUS_CANONICOS, MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
+import { MENUS_CANONICOS, MENUS_OPERACIONAIS, MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
 import { DRIZZLE } from '../../src/database/database.module';
 
@@ -75,7 +75,30 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .flatMap((g: { permissoes: { codigo: string }[] }) => g.permissoes.map((p) => p.codigo))
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
-    expect(MENUS_CANONICOS).toHaveLength(41);
-    expect(res.body.menus).toHaveLength(41);
+    expect(MENUS_OPERACIONAIS).toHaveLength(39);
+    expect(MENUS_CANONICOS).toHaveLength(46);
+    expect(res.body.menus).toHaveLength(46);
+  });
+
+  it('GET /perfis/catalogo devolve o módulo Fiscal com as treze permissões e suas descrições', async () => {
+    const res = await request(srv()).get('/perfis/catalogo').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    const fiscal = res.body.grupos.find((g: { modulo: string }) => g.modulo === 'Fiscal');
+    expect(fiscal).toBeDefined();
+    expect(fiscal.permissoes).toEqual([
+      { codigo: 'FISCAL_EMPRESAS_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_APROVAR },
+      { codigo: 'FISCAL_EMPRESAS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_GERENCIAR },
+      { codigo: 'FISCAL_EMPRESAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_LER },
+      { codigo: 'FISCAL_ENQUADRAMENTOS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_ENQUADRAMENTOS_GERENCIAR },
+      { codigo: 'FISCAL_ENQUADRAMENTOS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_ENQUADRAMENTOS_LER },
+      { codigo: 'FISCAL_HOMOLOGACOES_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_APROVAR },
+      { codigo: 'FISCAL_HOMOLOGACOES_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_GERENCIAR },
+      { codigo: 'FISCAL_HOMOLOGACOES_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_LER },
+      { codigo: 'FISCAL_REGRAS_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_APROVAR },
+      { codigo: 'FISCAL_REGRAS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_GERENCIAR },
+      { codigo: 'FISCAL_REGRAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_LER },
+      { codigo: 'FISCAL_SIMULACOES_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_SIMULACOES_GERENCIAR },
+      { codigo: 'FISCAL_SIMULACOES_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_SIMULACOES_LER },
+    ]);
   });
 });

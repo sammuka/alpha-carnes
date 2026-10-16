@@ -81,6 +81,18 @@ export const EVENTOS = {
   // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
   SEGURO_ATUALIZADO: 'seguro_atualizado',
   CAMINHAO_LIBERADO: 'caminhao_liberado',
+  // ── E01-T01 — Cadastro fiscal (room protegida `fiscal-empresas`) ───────────
+  EMPRESA_FISCAL_ALTERADA: 'empresa_fiscal_alterada',
+  ESTABELECIMENTO_FISCAL_ALTERADO: 'estabelecimento_fiscal_alterado',
+  REGIME_TRIBUTARIO_ALTERADO: 'regime_tributario_alterado',
+  // ── E01-T02 — Enquadramento fiscal (room `fiscal-enquadramentos`, Task 9) ──
+  ENQUADRAMENTO_FISCAL_ALTERADO: 'enquadramento_fiscal_alterado',
+  // ── E01-T03 — Regras tributárias (room `fiscal-regras`) ──
+  REGRA_TRIBUTARIA_ALTERADA: 'regra_tributaria_alterada',
+  // ── E01-T04 — Simulador fiscal (room `fiscal-simulacoes`) ──
+  SIMULACAO_FISCAL_ALTERADA: 'simulacao_fiscal_alterada',
+  // ── E01-T05 — Homologação de regras (room `fiscal-homologacoes`) ──
+  HOMOLOGACAO_REGRA_ALTERADA: 'homologacao_regra_alterada',
   // ── E09-T01 — Plano de contas ─────────────────────────────────────────────
   PLANO_CONTA_CRIADA: 'plano_conta_criada',
   PLANO_CONTA_VERSIONADA: 'plano_conta_versionada',
@@ -461,6 +473,99 @@ export interface CaminhaoLiberadoPayload {
   dataOperacao: string;
 }
 
+// ── E01-T01 — Cadastro fiscal ─────────────────────────────────────────────
+
+export type AcaoCadastroFiscal =
+  | 'criado'
+  | 'atualizado'
+  | 'cnaes_atualizados'
+  | 'submetido'
+  | 'aprovado'
+  | 'rejeitado'
+  | 'suspenso'
+  | 'reativado'
+  | 'removido'
+  | 'alteracao_criada'
+  | 'alteracao_submetida'
+  | 'alteracao_aprovada'
+  | 'alteracao_rejeitada'
+  | 'alteracao_descartada';
+
+export interface CadastroFiscalAlteradoPayload {
+  empresaId: string;
+  estabelecimentoId?: string;
+  regimeId?: string;
+  acao: AcaoCadastroFiscal;
+  situacao?: string;
+}
+
+export type AcaoEnquadramentoFiscal =
+  | 'criado'
+  | 'atualizado'
+  | 'duplicado'
+  | 'inativado'
+  | 'reativado'
+  | 'removido'
+  | 'cfop_criado'
+  | 'ncm_criado';
+
+/**
+ * Catálogo manual (cfop_criado/ncm_criado) não tem empresa nem estabelecimento.
+ * Mutação de enquadramento preenche os três identificadores.
+ */
+export interface EnquadramentoFiscalAlteradoPayload {
+  enquadramentoId: string;
+  estabelecimentoId?: string;
+  empresaId?: string;
+  acao: AcaoEnquadramentoFiscal;
+  situacao?: string;
+}
+
+export type AcaoRegraTributaria =
+  | 'rascunho_criado'
+  | 'rascunho_atualizado'
+  | 'versao_adicionada'
+  | 'submetida'
+  | 'aprovada'
+  | 'aposentada';
+
+/** Sem percentual, CST ou id de nota. */
+export interface SimulacaoFiscalAlteradaPayload {
+  simulacaoId: string;
+  codigo: string;
+  numeroVersao: number;
+  acao: 'simulada' | 'versao_adicionada';
+}
+
+export interface HomologacaoRegraAlteradaPayload {
+  homologacaoId: string;
+  regraId: string;
+  codigo: string;
+  acao: 'revisao_aberta' | 'cenario_vinculado' | 'aprovada' | 'rejeitada' | 'publicada';
+  situacao: string;
+}
+
+export type AcaoCatalogoTributario = 'beneficio_criado' | 'classificacao_criada';
+
+/** Sem percentual, CST ou id de nota. */
+export interface RegraTributariaVersaoPayload {
+  regraId: string;
+  enquadramentoId: string;
+  codigo: string;
+  numeroVersao: number;
+  acao: AcaoRegraTributaria;
+  situacao: string;
+}
+
+/** Catálogo manual (benefício, classificação) não tem regra nem enquadramento: só o código criado. */
+export interface RegraTributariaCatalogoPayload {
+  codigo: string;
+  acao: AcaoCatalogoTributario;
+  situacao: string;
+}
+
+export type RegraTributariaAlteradaPayload = RegraTributariaVersaoPayload | RegraTributariaCatalogoPayload;
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
@@ -537,4 +642,12 @@ export interface PayloadPorEvento {
   // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
   seguro_atualizado: SeguroAtualizadoPayload;
   caminhao_liberado: CaminhaoLiberadoPayload;
+  // ── E01-T01 — Cadastro fiscal ─────────────────────────────────────────────
+  empresa_fiscal_alterada: CadastroFiscalAlteradoPayload;
+  estabelecimento_fiscal_alterado: CadastroFiscalAlteradoPayload;
+  regime_tributario_alterado: CadastroFiscalAlteradoPayload;
+  enquadramento_fiscal_alterado: EnquadramentoFiscalAlteradoPayload;
+  regra_tributaria_alterada: RegraTributariaAlteradaPayload;
+  simulacao_fiscal_alterada: SimulacaoFiscalAlteradaPayload;
+  homologacao_regra_alterada: HomologacaoRegraAlteradaPayload;
 }

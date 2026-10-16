@@ -1,6 +1,6 @@
 {
-  "id": "179ed90c-6863-4766-a88a-2e87461f376b",
-  "prevId": "72e0f5d3-0697-4bea-a544-68c3fffcba32",
+  "id": "5a0f7d3e-5c8b-44f0-b533-56c4606536ef",
+  "prevId": "cc69e27a-a76b-4919-ace4-9e7328870365",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -11500,6 +11500,4601 @@
       },
       "isRLSEnabled": false
     },
+    "public.empresas": {
+      "name": "empresas",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "razao_social": {
+          "name": "razao_social",
+          "type": "varchar(150)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cnpj_raiz": {
+          "name": "cnpj_raiz",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_empresas_cnpj_raiz": {
+          "name": "uq_empresas_cnpj_raiz",
+          "columns": [
+            {
+              "expression": "cnpj_raiz",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"empresas\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_empresas_criado_por": {
+          "name": "idx_empresas_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_empresas_atualizado_por": {
+          "name": "idx_empresas_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "empresas_criado_por_id_usuarios_id_fk": {
+          "name": "empresas_criado_por_id_usuarios_id_fk",
+          "tableFrom": "empresas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "empresas_atualizado_por_id_usuarios_id_fk": {
+          "name": "empresas_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "empresas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "empresas_cnpj_raiz_formato_check": {
+          "name": "empresas_cnpj_raiz_formato_check",
+          "value": "\"empresas\".\"cnpj_raiz\" ~ '^[0-9A-Z]{8}$'"
+        },
+        "empresas_razao_social_preenchida_check": {
+          "name": "empresas_razao_social_preenchida_check",
+          "value": "btrim(\"empresas\".\"razao_social\") <> ''"
+        },
+        "empresas_versao_positiva_check": {
+          "name": "empresas_versao_positiva_check",
+          "value": "\"empresas\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.estabelecimento_alteracao_cnaes": {
+      "name": "estabelecimento_alteracao_cnaes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "alteracao_id": {
+          "name": "alteracao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_estab_alt_cnaes_principal": {
+          "name": "uq_estab_alt_cnaes_principal",
+          "columns": [
+            {
+              "expression": "alteracao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimento_alteracao_cnaes\".\"tipo\" = 'PRINCIPAL' AND \"estabelecimento_alteracao_cnaes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_estab_alt_cnaes_codigo": {
+          "name": "uq_estab_alt_cnaes_codigo",
+          "columns": [
+            {
+              "expression": "alteracao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimento_alteracao_cnaes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alt_cnaes_alteracao": {
+          "name": "idx_estab_alt_cnaes_alteracao",
+          "columns": [
+            {
+              "expression": "alteracao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alt_cnaes_criado_por": {
+          "name": "idx_estab_alt_cnaes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alt_cnaes_atualizado_por": {
+          "name": "idx_estab_alt_cnaes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "estabelecimento_alteracao_cnaes_alteracao_id_estabelecimento_alteracoes_id_fk": {
+          "name": "estabelecimento_alteracao_cnaes_alteracao_id_estabelecimento_alteracoes_id_fk",
+          "tableFrom": "estabelecimento_alteracao_cnaes",
+          "tableTo": "estabelecimento_alteracoes",
+          "columnsFrom": [
+            "alteracao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_alteracao_cnaes_criado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracao_cnaes_criado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracao_cnaes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_alteracao_cnaes_atualizado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracao_cnaes_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracao_cnaes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "estab_alt_cnaes_codigo_formato_check": {
+          "name": "estab_alt_cnaes_codigo_formato_check",
+          "value": "\"estabelecimento_alteracao_cnaes\".\"codigo\" ~ '^[0-9]{7}$'"
+        },
+        "estab_alt_cnaes_tipo_valido_check": {
+          "name": "estab_alt_cnaes_tipo_valido_check",
+          "value": "\"estabelecimento_alteracao_cnaes\".\"tipo\" IN ('PRINCIPAL','SECUNDARIA')"
+        },
+        "estab_alt_cnaes_descricao_preenchida_check": {
+          "name": "estab_alt_cnaes_descricao_preenchida_check",
+          "value": "btrim(\"estabelecimento_alteracao_cnaes\".\"descricao\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.estabelecimento_alteracoes": {
+      "name": "estabelecimento_alteracoes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "estabelecimento_id": {
+          "name": "estabelecimento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inscricao_estadual": {
+          "name": "inscricao_estadual",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inscricao_municipal": {
+          "name": "inscricao_municipal",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uf": {
+          "name": "uf",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao_base": {
+          "name": "versao_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "justificativa": {
+          "name": "justificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo_rejeicao": {
+          "name": "motivo_rejeicao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submetido_por_id": {
+          "name": "submetido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_por_id": {
+          "name": "decidido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_em": {
+          "name": "decidido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_estab_alteracoes_aberta": {
+          "name": "uq_estab_alteracoes_aberta",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimento_alteracoes\".\"situacao\" IN ('DRAFT','REVIEW') AND \"estabelecimento_alteracoes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_estabelecimento": {
+          "name": "idx_estab_alteracoes_estabelecimento",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_empresa": {
+          "name": "idx_estab_alteracoes_empresa",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_situacao": {
+          "name": "idx_estab_alteracoes_situacao",
+          "columns": [
+            {
+              "expression": "situacao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"estabelecimento_alteracoes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_submetido_por": {
+          "name": "idx_estab_alteracoes_submetido_por",
+          "columns": [
+            {
+              "expression": "submetido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_decidido_por": {
+          "name": "idx_estab_alteracoes_decidido_por",
+          "columns": [
+            {
+              "expression": "decidido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_criado_por": {
+          "name": "idx_estab_alteracoes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_alteracoes_atualizado_por": {
+          "name": "idx_estab_alteracoes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "estabelecimento_alteracoes_submetido_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracoes_submetido_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracoes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "submetido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_alteracoes_decidido_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracoes_decidido_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracoes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "decidido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_alteracoes_criado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracoes_criado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracoes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_alteracoes_atualizado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_alteracoes_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_alteracoes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fk_estab_alteracoes_estabelecimento_empresa": {
+          "name": "fk_estab_alteracoes_estabelecimento_empresa",
+          "tableFrom": "estabelecimento_alteracoes",
+          "tableTo": "estabelecimentos",
+          "columnsFrom": [
+            "estabelecimento_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "estab_alteracoes_ie_formato_check": {
+          "name": "estab_alteracoes_ie_formato_check",
+          "value": "\"estabelecimento_alteracoes\".\"inscricao_estadual\" ~ '^[0-9A-Z]{1,20}$'"
+        },
+        "estab_alteracoes_im_formato_check": {
+          "name": "estab_alteracoes_im_formato_check",
+          "value": "\"estabelecimento_alteracoes\".\"inscricao_municipal\" ~ '^[0-9A-Z]{1,20}$'"
+        },
+        "estab_alteracoes_nome_preenchido_check": {
+          "name": "estab_alteracoes_nome_preenchido_check",
+          "value": "btrim(\"estabelecimento_alteracoes\".\"nome\") <> ''"
+        },
+        "estab_alteracoes_uf_valida_check": {
+          "name": "estab_alteracoes_uf_valida_check",
+          "value": "\"estabelecimento_alteracoes\".\"uf\" IN ('AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO')"
+        },
+        "estab_alteracoes_situacao_valida_check": {
+          "name": "estab_alteracoes_situacao_valida_check",
+          "value": "\"estabelecimento_alteracoes\".\"situacao\" IN ('DRAFT','REVIEW','APPROVED','REJECTED')"
+        },
+        "estab_alteracoes_justificativa_preenchida_check": {
+          "name": "estab_alteracoes_justificativa_preenchida_check",
+          "value": "btrim(\"estabelecimento_alteracoes\".\"justificativa\") <> ''"
+        },
+        "estab_alteracoes_review_submetido_check": {
+          "name": "estab_alteracoes_review_submetido_check",
+          "value": "\"estabelecimento_alteracoes\".\"situacao\" <> 'REVIEW' OR \"estabelecimento_alteracoes\".\"submetido_por_id\" IS NOT NULL"
+        },
+        "estab_alteracoes_decidido_check": {
+          "name": "estab_alteracoes_decidido_check",
+          "value": "\"estabelecimento_alteracoes\".\"situacao\" NOT IN ('APPROVED','REJECTED') OR (\"estabelecimento_alteracoes\".\"decidido_por_id\" IS NOT NULL AND \"estabelecimento_alteracoes\".\"decidido_em\" IS NOT NULL)"
+        },
+        "estab_alteracoes_rejeitada_motivo_check": {
+          "name": "estab_alteracoes_rejeitada_motivo_check",
+          "value": "\"estabelecimento_alteracoes\".\"situacao\" <> 'REJECTED' OR \"estabelecimento_alteracoes\".\"motivo_rejeicao\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.estabelecimento_cnaes": {
+      "name": "estabelecimento_cnaes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "estabelecimento_id": {
+          "name": "estabelecimento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_estab_cnaes_principal": {
+          "name": "uq_estab_cnaes_principal",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimento_cnaes\".\"tipo\" = 'PRINCIPAL' AND \"estabelecimento_cnaes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_estab_cnaes_codigo": {
+          "name": "uq_estab_cnaes_codigo",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimento_cnaes\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_cnaes_estabelecimento": {
+          "name": "idx_estab_cnaes_estabelecimento",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_cnaes_empresa": {
+          "name": "idx_estab_cnaes_empresa",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_cnaes_criado_por": {
+          "name": "idx_estab_cnaes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estab_cnaes_atualizado_por": {
+          "name": "idx_estab_cnaes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "estabelecimento_cnaes_criado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_cnaes_criado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_cnaes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimento_cnaes_atualizado_por_id_usuarios_id_fk": {
+          "name": "estabelecimento_cnaes_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimento_cnaes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fk_estab_cnaes_estabelecimento_empresa": {
+          "name": "fk_estab_cnaes_estabelecimento_empresa",
+          "tableFrom": "estabelecimento_cnaes",
+          "tableTo": "estabelecimentos",
+          "columnsFrom": [
+            "estabelecimento_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "estab_cnaes_codigo_formato_check": {
+          "name": "estab_cnaes_codigo_formato_check",
+          "value": "\"estabelecimento_cnaes\".\"codigo\" ~ '^[0-9]{7}$'"
+        },
+        "estab_cnaes_tipo_valido_check": {
+          "name": "estab_cnaes_tipo_valido_check",
+          "value": "\"estabelecimento_cnaes\".\"tipo\" IN ('PRINCIPAL','SECUNDARIA')"
+        },
+        "estab_cnaes_descricao_preenchida_check": {
+          "name": "estab_cnaes_descricao_preenchida_check",
+          "value": "btrim(\"estabelecimento_cnaes\".\"descricao\") <> ''"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.estabelecimentos": {
+      "name": "estabelecimentos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nome": {
+          "name": "nome",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "varchar(14)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inscricao_estadual": {
+          "name": "inscricao_estadual",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inscricao_municipal": {
+          "name": "inscricao_municipal",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uf": {
+          "name": "uf",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "municipio_ibge_codigo": {
+          "name": "municipio_ibge_codigo",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "justificativa_situacao": {
+          "name": "justificativa_situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submetido_por_id": {
+          "name": "submetido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_por_id": {
+          "name": "decidido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_em": {
+          "name": "decidido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_estabelecimentos_cnpj": {
+          "name": "uq_estabelecimentos_cnpj",
+          "columns": [
+            {
+              "expression": "cnpj",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"estabelecimentos\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_empresa": {
+          "name": "idx_estabelecimentos_empresa",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_situacao": {
+          "name": "idx_estabelecimentos_situacao",
+          "columns": [
+            {
+              "expression": "situacao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"estabelecimentos\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_submetido_por": {
+          "name": "idx_estabelecimentos_submetido_por",
+          "columns": [
+            {
+              "expression": "submetido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_decidido_por": {
+          "name": "idx_estabelecimentos_decidido_por",
+          "columns": [
+            {
+              "expression": "decidido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_criado_por": {
+          "name": "idx_estabelecimentos_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_estabelecimentos_atualizado_por": {
+          "name": "idx_estabelecimentos_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "estabelecimentos_empresa_id_empresas_id_fk": {
+          "name": "estabelecimentos_empresa_id_empresas_id_fk",
+          "tableFrom": "estabelecimentos",
+          "tableTo": "empresas",
+          "columnsFrom": [
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimentos_submetido_por_id_usuarios_id_fk": {
+          "name": "estabelecimentos_submetido_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimentos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "submetido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimentos_decidido_por_id_usuarios_id_fk": {
+          "name": "estabelecimentos_decidido_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimentos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "decidido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimentos_criado_por_id_usuarios_id_fk": {
+          "name": "estabelecimentos_criado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimentos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "estabelecimentos_atualizado_por_id_usuarios_id_fk": {
+          "name": "estabelecimentos_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "estabelecimentos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_estabelecimentos_id_empresa": {
+          "name": "uq_estabelecimentos_id_empresa",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "empresa_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "estabelecimentos_cnpj_formato_check": {
+          "name": "estabelecimentos_cnpj_formato_check",
+          "value": "\"estabelecimentos\".\"cnpj\" ~ '^[0-9A-Z]{12}[0-9]{2}$'"
+        },
+        "estabelecimentos_ie_formato_check": {
+          "name": "estabelecimentos_ie_formato_check",
+          "value": "\"estabelecimentos\".\"inscricao_estadual\" ~ '^[0-9A-Z]{1,20}$'"
+        },
+        "estabelecimentos_im_formato_check": {
+          "name": "estabelecimentos_im_formato_check",
+          "value": "\"estabelecimentos\".\"inscricao_municipal\" ~ '^[0-9A-Z]{1,20}$'"
+        },
+        "estabelecimentos_nome_preenchido_check": {
+          "name": "estabelecimentos_nome_preenchido_check",
+          "value": "btrim(\"estabelecimentos\".\"nome\") <> ''"
+        },
+        "estabelecimentos_uf_valida_check": {
+          "name": "estabelecimentos_uf_valida_check",
+          "value": "\"estabelecimentos\".\"uf\" IN ('AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO')"
+        },
+        "estabelecimentos_municipio_formato_check": {
+          "name": "estabelecimentos_municipio_formato_check",
+          "value": "\"estabelecimentos\".\"municipio_ibge_codigo\" IS NULL OR \"estabelecimentos\".\"municipio_ibge_codigo\" ~ '^[0-9]{7}$'"
+        },
+        "estabelecimentos_situacao_valida_check": {
+          "name": "estabelecimentos_situacao_valida_check",
+          "value": "\"estabelecimentos\".\"situacao\" IN ('DRAFT','REVIEW','APPROVED','REJECTED','SUSPENDED')"
+        },
+        "estabelecimentos_review_submetido_check": {
+          "name": "estabelecimentos_review_submetido_check",
+          "value": "\"estabelecimentos\".\"situacao\" <> 'REVIEW' OR \"estabelecimentos\".\"submetido_por_id\" IS NOT NULL"
+        },
+        "estabelecimentos_aprovado_decidido_check": {
+          "name": "estabelecimentos_aprovado_decidido_check",
+          "value": "\"estabelecimentos\".\"situacao\" <> 'APPROVED' OR (\"estabelecimentos\".\"decidido_por_id\" IS NOT NULL AND \"estabelecimentos\".\"decidido_em\" IS NOT NULL)"
+        },
+        "estabelecimentos_justificativa_situacao_check": {
+          "name": "estabelecimentos_justificativa_situacao_check",
+          "value": "\"estabelecimentos\".\"situacao\" NOT IN ('REJECTED','SUSPENDED') OR \"estabelecimentos\".\"justificativa_situacao\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.regimes_tributarios": {
+      "name": "regimes_tributarios",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "estabelecimento_id": {
+          "name": "estabelecimento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "crt": {
+          "name": "crt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_inicio": {
+          "name": "vigencia_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_fim": {
+          "name": "vigencia_fim",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "justificativa": {
+          "name": "justificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo_rejeicao": {
+          "name": "motivo_rejeicao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "substitui_regime_id": {
+          "name": "substitui_regime_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submetido_por_id": {
+          "name": "submetido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_por_id": {
+          "name": "decidido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_em": {
+          "name": "decidido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_regimes_estabelecimento": {
+          "name": "idx_regimes_estabelecimento",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_empresa": {
+          "name": "idx_regimes_empresa",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_estab_situacao": {
+          "name": "idx_regimes_estab_situacao",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "situacao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"regimes_tributarios\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_substitui": {
+          "name": "idx_regimes_substitui",
+          "columns": [
+            {
+              "expression": "substitui_regime_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_submetido_por": {
+          "name": "idx_regimes_submetido_por",
+          "columns": [
+            {
+              "expression": "submetido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_decidido_por": {
+          "name": "idx_regimes_decidido_por",
+          "columns": [
+            {
+              "expression": "decidido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_criado_por": {
+          "name": "idx_regimes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regimes_atualizado_por": {
+          "name": "idx_regimes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "regimes_tributarios_submetido_por_id_usuarios_id_fk": {
+          "name": "regimes_tributarios_submetido_por_id_usuarios_id_fk",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "submetido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regimes_tributarios_decidido_por_id_usuarios_id_fk": {
+          "name": "regimes_tributarios_decidido_por_id_usuarios_id_fk",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "decidido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regimes_tributarios_criado_por_id_usuarios_id_fk": {
+          "name": "regimes_tributarios_criado_por_id_usuarios_id_fk",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regimes_tributarios_atualizado_por_id_usuarios_id_fk": {
+          "name": "regimes_tributarios_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fk_regimes_estabelecimento_empresa": {
+          "name": "fk_regimes_estabelecimento_empresa",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "estabelecimentos",
+          "columnsFrom": [
+            "estabelecimento_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "fk_regimes_substitui_mesmo_estabelecimento": {
+          "name": "fk_regimes_substitui_mesmo_estabelecimento",
+          "tableFrom": "regimes_tributarios",
+          "tableTo": "regimes_tributarios",
+          "columnsFrom": [
+            "substitui_regime_id",
+            "estabelecimento_id"
+          ],
+          "columnsTo": [
+            "id",
+            "estabelecimento_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "uq_regimes_id_estabelecimento": {
+          "name": "uq_regimes_id_estabelecimento",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "estabelecimento_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "regimes_crt_valido_check": {
+          "name": "regimes_crt_valido_check",
+          "value": "\"regimes_tributarios\".\"crt\" IN ('1','2','3','4')"
+        },
+        "regimes_situacao_valida_check": {
+          "name": "regimes_situacao_valida_check",
+          "value": "\"regimes_tributarios\".\"situacao\" IN ('DRAFT','REVIEW','APPROVED','REJECTED')"
+        },
+        "regimes_vigencia_ordenada_check": {
+          "name": "regimes_vigencia_ordenada_check",
+          "value": "\"regimes_tributarios\".\"vigencia_fim\" IS NULL OR \"regimes_tributarios\".\"vigencia_fim\" >= \"regimes_tributarios\".\"vigencia_inicio\""
+        },
+        "regimes_justificativa_preenchida_check": {
+          "name": "regimes_justificativa_preenchida_check",
+          "value": "btrim(\"regimes_tributarios\".\"justificativa\") <> ''"
+        },
+        "regimes_review_submetido_check": {
+          "name": "regimes_review_submetido_check",
+          "value": "\"regimes_tributarios\".\"situacao\" <> 'REVIEW' OR \"regimes_tributarios\".\"submetido_por_id\" IS NOT NULL"
+        },
+        "regimes_aprovado_decidido_check": {
+          "name": "regimes_aprovado_decidido_check",
+          "value": "\"regimes_tributarios\".\"situacao\" <> 'APPROVED' OR (\"regimes_tributarios\".\"decidido_por_id\" IS NOT NULL AND \"regimes_tributarios\".\"decidido_em\" IS NOT NULL)"
+        },
+        "regimes_rejeitado_motivo_check": {
+          "name": "regimes_rejeitado_motivo_check",
+          "value": "\"regimes_tributarios\".\"situacao\" <> 'REJECTED' OR \"regimes_tributarios\".\"motivo_rejeicao\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cfops": {
+      "name": "cfops",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_cfops_codigo": {
+          "name": "uq_cfops_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"cfops\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cfops_criado_por": {
+          "name": "idx_cfops_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cfops_atualizado_por": {
+          "name": "idx_cfops_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cfops_criado_por_id_usuarios_id_fk": {
+          "name": "cfops_criado_por_id_usuarios_id_fk",
+          "tableFrom": "cfops",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cfops_atualizado_por_id_usuarios_id_fk": {
+          "name": "cfops_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "cfops",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cfops_codigo_formato_check": {
+          "name": "cfops_codigo_formato_check",
+          "value": "\"cfops\".\"codigo\" ~ '^[0-9]{4}$'"
+        },
+        "cfops_descricao_preenchida_check": {
+          "name": "cfops_descricao_preenchida_check",
+          "value": "btrim(\"cfops\".\"descricao\") <> ''"
+        },
+        "cfops_versao_positiva_check": {
+          "name": "cfops_versao_positiva_check",
+          "value": "\"cfops\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.enquadramentos_fiscais": {
+      "name": "enquadramentos_fiscais",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "empresa_id": {
+          "name": "empresa_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estabelecimento_id": {
+          "name": "estabelecimento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operacao_id": {
+          "name": "operacao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tp_nf": {
+          "name": "tp_nf",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fin_nfe": {
+          "name": "fin_nfe",
+          "type": "varchar(1)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cfop_id": {
+          "name": "cfop_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "abrangencia": {
+          "name": "abrangencia",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tipo_produto": {
+          "name": "tipo_produto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "produto_id": {
+          "name": "produto_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ncm_id": {
+          "name": "ncm_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cest": {
+          "name": "cest",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_inicio": {
+          "name": "vigencia_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_fim": {
+          "name": "vigencia_fim",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prioridade": {
+          "name": "prioridade",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ATIVA'"
+        },
+        "origem_enquadramento_id": {
+          "name": "origem_enquadramento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "justificativa_situacao": {
+          "name": "justificativa_situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_enquadramentos_codigo": {
+          "name": "uq_enquadramentos_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"enquadramentos_fiscais\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_empresa": {
+          "name": "idx_enquadramentos_empresa",
+          "columns": [
+            {
+              "expression": "empresa_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_estabelecimento": {
+          "name": "idx_enquadramentos_estabelecimento",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_operacao": {
+          "name": "idx_enquadramentos_operacao",
+          "columns": [
+            {
+              "expression": "operacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_cfop": {
+          "name": "idx_enquadramentos_cfop",
+          "columns": [
+            {
+              "expression": "cfop_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_produto": {
+          "name": "idx_enquadramentos_produto",
+          "columns": [
+            {
+              "expression": "produto_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_ncm": {
+          "name": "idx_enquadramentos_ncm",
+          "columns": [
+            {
+              "expression": "ncm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_cliente": {
+          "name": "idx_enquadramentos_cliente",
+          "columns": [
+            {
+              "expression": "cliente_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_origem": {
+          "name": "idx_enquadramentos_origem",
+          "columns": [
+            {
+              "expression": "origem_enquadramento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_vigencia": {
+          "name": "idx_enquadramentos_vigencia",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "vigencia_inicio",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_criado_por": {
+          "name": "idx_enquadramentos_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_enquadramentos_atualizado_por": {
+          "name": "idx_enquadramentos_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "enquadramentos_fiscais_operacao_id_operacoes_id_fk": {
+          "name": "enquadramentos_fiscais_operacao_id_operacoes_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "operacoes",
+          "columnsFrom": [
+            "operacao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_cfop_id_cfops_id_fk": {
+          "name": "enquadramentos_fiscais_cfop_id_cfops_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "cfops",
+          "columnsFrom": [
+            "cfop_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_produto_id_produtos_id_fk": {
+          "name": "enquadramentos_fiscais_produto_id_produtos_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "produtos",
+          "columnsFrom": [
+            "produto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_ncm_id_ncms_id_fk": {
+          "name": "enquadramentos_fiscais_ncm_id_ncms_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "ncms",
+          "columnsFrom": [
+            "ncm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_cliente_id_clientes_id_fk": {
+          "name": "enquadramentos_fiscais_cliente_id_clientes_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "clientes",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_criado_por_id_usuarios_id_fk": {
+          "name": "enquadramentos_fiscais_criado_por_id_usuarios_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_atualizado_por_id_usuarios_id_fk": {
+          "name": "enquadramentos_fiscais_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_estabelecimento_empresa_fk": {
+          "name": "enquadramentos_fiscais_estabelecimento_empresa_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "estabelecimentos",
+          "columnsFrom": [
+            "estabelecimento_id",
+            "empresa_id"
+          ],
+          "columnsTo": [
+            "id",
+            "empresa_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "enquadramentos_fiscais_origem_fk": {
+          "name": "enquadramentos_fiscais_origem_fk",
+          "tableFrom": "enquadramentos_fiscais",
+          "tableTo": "enquadramentos_fiscais",
+          "columnsFrom": [
+            "origem_enquadramento_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "enquadramentos_codigo_formato_check": {
+          "name": "enquadramentos_codigo_formato_check",
+          "value": "\"enquadramentos_fiscais\".\"codigo\" ~ '^[1-9][0-9]{0,17}$'"
+        },
+        "enquadramentos_tp_nf_check": {
+          "name": "enquadramentos_tp_nf_check",
+          "value": "\"enquadramentos_fiscais\".\"tp_nf\" IN ('0','1')"
+        },
+        "enquadramentos_fin_nfe_check": {
+          "name": "enquadramentos_fin_nfe_check",
+          "value": "\"enquadramentos_fiscais\".\"fin_nfe\" IN ('1','2','3','4')"
+        },
+        "enquadramentos_abrangencia_check": {
+          "name": "enquadramentos_abrangencia_check",
+          "value": "\"enquadramentos_fiscais\".\"abrangencia\" IN ('INTERNA','INTER','EXT')"
+        },
+        "enquadramentos_tipo_produto_check": {
+          "name": "enquadramentos_tipo_produto_check",
+          "value": "\"enquadramentos_fiscais\".\"tipo_produto\" IN ('PROPRIA','REVENDA','SUB')"
+        },
+        "enquadramentos_cest_formato_check": {
+          "name": "enquadramentos_cest_formato_check",
+          "value": "\"enquadramentos_fiscais\".\"cest\" ~ '^[0-9]{7}$'"
+        },
+        "enquadramentos_vigencia_ordem_check": {
+          "name": "enquadramentos_vigencia_ordem_check",
+          "value": "\"enquadramentos_fiscais\".\"vigencia_fim\" IS NULL OR \"enquadramentos_fiscais\".\"vigencia_fim\" >= \"enquadramentos_fiscais\".\"vigencia_inicio\""
+        },
+        "enquadramentos_prioridade_check": {
+          "name": "enquadramentos_prioridade_check",
+          "value": "\"enquadramentos_fiscais\".\"prioridade\" >= 1"
+        },
+        "enquadramentos_situacao_check": {
+          "name": "enquadramentos_situacao_check",
+          "value": "\"enquadramentos_fiscais\".\"situacao\" IN ('ATIVA','INATIVA')"
+        },
+        "enquadramentos_versao_positiva_check": {
+          "name": "enquadramentos_versao_positiva_check",
+          "value": "\"enquadramentos_fiscais\".\"versao\" >= 1"
+        },
+        "enquadramentos_inativa_justificativa_check": {
+          "name": "enquadramentos_inativa_justificativa_check",
+          "value": "\"enquadramentos_fiscais\".\"situacao\" <> 'INATIVA' OR \"enquadramentos_fiscais\".\"justificativa_situacao\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ncms": {
+      "name": "ncms",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_ncms_codigo": {
+          "name": "uq_ncms_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ncms\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_ncms_criado_por": {
+          "name": "idx_ncms_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_ncms_atualizado_por": {
+          "name": "idx_ncms_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ncms_criado_por_id_usuarios_id_fk": {
+          "name": "ncms_criado_por_id_usuarios_id_fk",
+          "tableFrom": "ncms",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ncms_atualizado_por_id_usuarios_id_fk": {
+          "name": "ncms_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "ncms",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ncms_codigo_formato_check": {
+          "name": "ncms_codigo_formato_check",
+          "value": "\"ncms\".\"codigo\" ~ '^[0-9]{8}$'"
+        },
+        "ncms_descricao_preenchida_check": {
+          "name": "ncms_descricao_preenchida_check",
+          "value": "btrim(\"ncms\".\"descricao\") <> ''"
+        },
+        "ncms_versao_positiva_check": {
+          "name": "ncms_versao_positiva_check",
+          "value": "\"ncms\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.beneficios_fiscais": {
+      "name": "beneficios_fiscais",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_beneficios_codigo": {
+          "name": "uq_beneficios_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"beneficios_fiscais\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_beneficios_criado_por": {
+          "name": "idx_beneficios_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_beneficios_atualizado_por": {
+          "name": "idx_beneficios_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "beneficios_fiscais_criado_por_id_usuarios_id_fk": {
+          "name": "beneficios_fiscais_criado_por_id_usuarios_id_fk",
+          "tableFrom": "beneficios_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "beneficios_fiscais_atualizado_por_id_usuarios_id_fk": {
+          "name": "beneficios_fiscais_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "beneficios_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "beneficios_codigo_formato_check": {
+          "name": "beneficios_codigo_formato_check",
+          "value": "\"beneficios_fiscais\".\"codigo\" ~ '^[A-Z]{2}[0-9]{6}$'"
+        },
+        "beneficios_descricao_preenchida_check": {
+          "name": "beneficios_descricao_preenchida_check",
+          "value": "btrim(\"beneficios_fiscais\".\"descricao\") <> ''"
+        },
+        "beneficios_versao_positiva_check": {
+          "name": "beneficios_versao_positiva_check",
+          "value": "\"beneficios_fiscais\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.classificacoes_ibs_cbs": {
+      "name": "classificacoes_ibs_cbs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(6)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_classificacoes_codigo": {
+          "name": "uq_classificacoes_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"classificacoes_ibs_cbs\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_classificacoes_criado_por": {
+          "name": "idx_classificacoes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_classificacoes_atualizado_por": {
+          "name": "idx_classificacoes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "classificacoes_ibs_cbs_criado_por_id_usuarios_id_fk": {
+          "name": "classificacoes_ibs_cbs_criado_por_id_usuarios_id_fk",
+          "tableFrom": "classificacoes_ibs_cbs",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "classificacoes_ibs_cbs_atualizado_por_id_usuarios_id_fk": {
+          "name": "classificacoes_ibs_cbs_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "classificacoes_ibs_cbs",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "classificacoes_codigo_formato_check": {
+          "name": "classificacoes_codigo_formato_check",
+          "value": "\"classificacoes_ibs_cbs\".\"codigo\" ~ '^[0-9]{6}$'"
+        },
+        "classificacoes_descricao_preenchida_check": {
+          "name": "classificacoes_descricao_preenchida_check",
+          "value": "btrim(\"classificacoes_ibs_cbs\".\"descricao\") <> ''"
+        },
+        "classificacoes_versao_positiva_check": {
+          "name": "classificacoes_versao_positiva_check",
+          "value": "\"classificacoes_ibs_cbs\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.regras_tributarias": {
+      "name": "regras_tributarias",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numero_versao": {
+          "name": "numero_versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enquadramento_id": {
+          "name": "enquadramento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "icms_cst": {
+          "name": "icms_cst",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "p_red_bc": {
+          "name": "p_red_bc",
+          "type": "numeric(5, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "p_icms": {
+          "name": "p_icms",
+          "type": "numeric(5, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "beneficio_fiscal_id": {
+          "name": "beneficio_fiscal_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ipi_cst": {
+          "name": "ipi_cst",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pis_cst": {
+          "name": "pis_cst",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ibs_cst": {
+          "name": "ibs_cst",
+          "type": "varchar(3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "classificacao_ibs_cbs_id": {
+          "name": "classificacao_ibs_cbs_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_inicio": {
+          "name": "vigencia_inicio",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vigencia_fim": {
+          "name": "vigencia_fim",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'RASCUNHO'"
+        },
+        "origem_versao_id": {
+          "name": "origem_versao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "justificativa": {
+          "name": "justificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submetido_por_id": {
+          "name": "submetido_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submetido_em": {
+          "name": "submetido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aprovado_por_id": {
+          "name": "aprovado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aprovado_em": {
+          "name": "aprovado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aposentado_por_id": {
+          "name": "aposentado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aposentado_em": {
+          "name": "aposentado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_regras_codigo_versao": {
+          "name": "uq_regras_codigo_versao",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "numero_versao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"regras_tributarias\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_regras_abertas_codigo": {
+          "name": "uq_regras_abertas_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"regras_tributarias\".\"deleted_at\" IS NULL AND \"regras_tributarias\".\"situacao\" IN ('RASCUNHO','SUBMETIDA')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_enquadramento": {
+          "name": "idx_regras_enquadramento",
+          "columns": [
+            {
+              "expression": "enquadramento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_beneficio": {
+          "name": "idx_regras_beneficio",
+          "columns": [
+            {
+              "expression": "beneficio_fiscal_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_classificacao": {
+          "name": "idx_regras_classificacao",
+          "columns": [
+            {
+              "expression": "classificacao_ibs_cbs_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_origem": {
+          "name": "idx_regras_origem",
+          "columns": [
+            {
+              "expression": "origem_versao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_situacao": {
+          "name": "idx_regras_situacao",
+          "columns": [
+            {
+              "expression": "situacao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"regras_tributarias\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_criado_por": {
+          "name": "idx_regras_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_atualizado_por": {
+          "name": "idx_regras_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_submetido_por": {
+          "name": "idx_regras_submetido_por",
+          "columns": [
+            {
+              "expression": "submetido_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_aprovado_por": {
+          "name": "idx_regras_aprovado_por",
+          "columns": [
+            {
+              "expression": "aprovado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_regras_aposentado_por": {
+          "name": "idx_regras_aposentado_por",
+          "columns": [
+            {
+              "expression": "aposentado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "regras_tributarias_enquadramento_id_enquadramentos_fiscais_id_fk": {
+          "name": "regras_tributarias_enquadramento_id_enquadramentos_fiscais_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "enquadramentos_fiscais",
+          "columnsFrom": [
+            "enquadramento_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_beneficio_fiscal_id_beneficios_fiscais_id_fk": {
+          "name": "regras_tributarias_beneficio_fiscal_id_beneficios_fiscais_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "beneficios_fiscais",
+          "columnsFrom": [
+            "beneficio_fiscal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_classificacao_ibs_cbs_id_classificacoes_ibs_cbs_id_fk": {
+          "name": "regras_tributarias_classificacao_ibs_cbs_id_classificacoes_ibs_cbs_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "classificacoes_ibs_cbs",
+          "columnsFrom": [
+            "classificacao_ibs_cbs_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_submetido_por_id_usuarios_id_fk": {
+          "name": "regras_tributarias_submetido_por_id_usuarios_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "submetido_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_aprovado_por_id_usuarios_id_fk": {
+          "name": "regras_tributarias_aprovado_por_id_usuarios_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "aprovado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_aposentado_por_id_usuarios_id_fk": {
+          "name": "regras_tributarias_aposentado_por_id_usuarios_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "aposentado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_criado_por_id_usuarios_id_fk": {
+          "name": "regras_tributarias_criado_por_id_usuarios_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_atualizado_por_id_usuarios_id_fk": {
+          "name": "regras_tributarias_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "regras_tributarias_origem_fk": {
+          "name": "regras_tributarias_origem_fk",
+          "tableFrom": "regras_tributarias",
+          "tableTo": "regras_tributarias",
+          "columnsFrom": [
+            "origem_versao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "regras_codigo_formato_check": {
+          "name": "regras_codigo_formato_check",
+          "value": "\"regras_tributarias\".\"codigo\" ~ '^[1-9][0-9]{0,17}$'"
+        },
+        "regras_numero_versao_check": {
+          "name": "regras_numero_versao_check",
+          "value": "\"regras_tributarias\".\"numero_versao\" >= 1"
+        },
+        "regras_icms_cst_check": {
+          "name": "regras_icms_cst_check",
+          "value": "\"regras_tributarias\".\"icms_cst\" IN ('00','20','40','41','51')"
+        },
+        "regras_ipi_cst_check": {
+          "name": "regras_ipi_cst_check",
+          "value": "\"regras_tributarias\".\"ipi_cst\" IN ('51','53','99')"
+        },
+        "regras_pis_cst_check": {
+          "name": "regras_pis_cst_check",
+          "value": "\"regras_tributarias\".\"pis_cst\" IN ('01','06','08','99')"
+        },
+        "regras_ibs_cst_check": {
+          "name": "regras_ibs_cst_check",
+          "value": "\"regras_tributarias\".\"ibs_cst\" IN ('000','200')"
+        },
+        "regras_p_red_bc_faixa_check": {
+          "name": "regras_p_red_bc_faixa_check",
+          "value": "\"regras_tributarias\".\"p_red_bc\" >= 0 AND \"regras_tributarias\".\"p_red_bc\" <= 1"
+        },
+        "regras_p_icms_faixa_check": {
+          "name": "regras_p_icms_faixa_check",
+          "value": "\"regras_tributarias\".\"p_icms\" >= 0 AND \"regras_tributarias\".\"p_icms\" <= 1"
+        },
+        "regras_vigencia_ordem_check": {
+          "name": "regras_vigencia_ordem_check",
+          "value": "\"regras_tributarias\".\"vigencia_fim\" IS NULL OR \"regras_tributarias\".\"vigencia_fim\" >= \"regras_tributarias\".\"vigencia_inicio\""
+        },
+        "regras_situacao_check": {
+          "name": "regras_situacao_check",
+          "value": "\"regras_tributarias\".\"situacao\" IN ('RASCUNHO','SUBMETIDA','APROVADA','APOSENTADA')"
+        },
+        "regras_versao_positiva_check": {
+          "name": "regras_versao_positiva_check",
+          "value": "\"regras_tributarias\".\"versao\" >= 1"
+        },
+        "regras_submetida_autor_check": {
+          "name": "regras_submetida_autor_check",
+          "value": "\"regras_tributarias\".\"situacao\" = 'RASCUNHO' OR \"regras_tributarias\".\"submetido_por_id\" IS NOT NULL"
+        },
+        "regras_aprovada_check": {
+          "name": "regras_aprovada_check",
+          "value": "\"regras_tributarias\".\"situacao\" NOT IN ('APROVADA','APOSENTADA') OR (\"regras_tributarias\".\"aprovado_por_id\" IS NOT NULL AND \"regras_tributarias\".\"aprovado_em\" IS NOT NULL)"
+        },
+        "regras_aposentada_check": {
+          "name": "regras_aposentada_check",
+          "value": "\"regras_tributarias\".\"situacao\" <> 'APOSENTADA' OR (\"regras_tributarias\".\"aposentado_por_id\" IS NOT NULL AND \"regras_tributarias\".\"aposentado_em\" IS NOT NULL)"
+        },
+        "regras_aprovador_diferente_check": {
+          "name": "regras_aprovador_diferente_check",
+          "value": "\"regras_tributarias\".\"aprovado_por_id\" IS NULL OR \"regras_tributarias\".\"aprovado_por_id\" <> \"regras_tributarias\".\"submetido_por_id\""
+        },
+        "regras_aposentador_diferente_check": {
+          "name": "regras_aposentador_diferente_check",
+          "value": "\"regras_tributarias\".\"aposentado_por_id\" IS NULL OR \"regras_tributarias\".\"aposentado_por_id\" <> \"regras_tributarias\".\"submetido_por_id\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.simulacoes_fiscais": {
+      "name": "simulacoes_fiscais",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numero_versao": {
+          "name": "numero_versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estabelecimento_id": {
+          "name": "estabelecimento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operacao_id": {
+          "name": "operacao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "produto_id": {
+          "name": "produto_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ncm_id": {
+          "name": "ncm_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade": {
+          "name": "quantidade",
+          "type": "numeric(15, 3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "peso_nf": {
+          "name": "peso_nf",
+          "type": "numeric(10, 3)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor": {
+          "name": "valor",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "desconto": {
+          "name": "desconto",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "competencia": {
+          "name": "competencia",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "enquadramento_id": {
+          "name": "enquadramento_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regra_id": {
+          "name": "regra_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "valor_liquido": {
+          "name": "valor_liquido",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_tributavel": {
+          "name": "base_tributavel",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "icms": {
+          "name": "icms",
+          "type": "numeric(15, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_difere_bruto": {
+          "name": "base_difere_bruto",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origem_versao_id": {
+          "name": "origem_versao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'CALCULADA'"
+        },
+        "justificativa": {
+          "name": "justificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_simulacoes_codigo_versao": {
+          "name": "uq_simulacoes_codigo_versao",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "numero_versao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"simulacoes_fiscais\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_estabelecimento": {
+          "name": "idx_simulacoes_estabelecimento",
+          "columns": [
+            {
+              "expression": "estabelecimento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_operacao": {
+          "name": "idx_simulacoes_operacao",
+          "columns": [
+            {
+              "expression": "operacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_cliente": {
+          "name": "idx_simulacoes_cliente",
+          "columns": [
+            {
+              "expression": "cliente_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_produto": {
+          "name": "idx_simulacoes_produto",
+          "columns": [
+            {
+              "expression": "produto_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_ncm": {
+          "name": "idx_simulacoes_ncm",
+          "columns": [
+            {
+              "expression": "ncm_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_enquadramento": {
+          "name": "idx_simulacoes_enquadramento",
+          "columns": [
+            {
+              "expression": "enquadramento_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_regra": {
+          "name": "idx_simulacoes_regra",
+          "columns": [
+            {
+              "expression": "regra_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_origem": {
+          "name": "idx_simulacoes_origem",
+          "columns": [
+            {
+              "expression": "origem_versao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_competencia": {
+          "name": "idx_simulacoes_competencia",
+          "columns": [
+            {
+              "expression": "competencia",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"simulacoes_fiscais\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_criado_por": {
+          "name": "idx_simulacoes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_simulacoes_atualizado_por": {
+          "name": "idx_simulacoes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "simulacoes_fiscais_estabelecimento_id_estabelecimentos_id_fk": {
+          "name": "simulacoes_fiscais_estabelecimento_id_estabelecimentos_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "estabelecimentos",
+          "columnsFrom": [
+            "estabelecimento_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_operacao_id_operacoes_id_fk": {
+          "name": "simulacoes_fiscais_operacao_id_operacoes_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "operacoes",
+          "columnsFrom": [
+            "operacao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_cliente_id_clientes_id_fk": {
+          "name": "simulacoes_fiscais_cliente_id_clientes_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "clientes",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_produto_id_produtos_id_fk": {
+          "name": "simulacoes_fiscais_produto_id_produtos_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "produtos",
+          "columnsFrom": [
+            "produto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_ncm_id_ncms_id_fk": {
+          "name": "simulacoes_fiscais_ncm_id_ncms_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "ncms",
+          "columnsFrom": [
+            "ncm_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_enquadramento_id_enquadramentos_fiscais_id_fk": {
+          "name": "simulacoes_fiscais_enquadramento_id_enquadramentos_fiscais_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "enquadramentos_fiscais",
+          "columnsFrom": [
+            "enquadramento_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_regra_id_regras_tributarias_id_fk": {
+          "name": "simulacoes_fiscais_regra_id_regras_tributarias_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "regras_tributarias",
+          "columnsFrom": [
+            "regra_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_criado_por_id_usuarios_id_fk": {
+          "name": "simulacoes_fiscais_criado_por_id_usuarios_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_atualizado_por_id_usuarios_id_fk": {
+          "name": "simulacoes_fiscais_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "simulacoes_fiscais_origem_fk": {
+          "name": "simulacoes_fiscais_origem_fk",
+          "tableFrom": "simulacoes_fiscais",
+          "tableTo": "simulacoes_fiscais",
+          "columnsFrom": [
+            "origem_versao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "simulacoes_codigo_formato_check": {
+          "name": "simulacoes_codigo_formato_check",
+          "value": "\"simulacoes_fiscais\".\"codigo\" ~ '^[1-9][0-9]{0,17}$'"
+        },
+        "simulacoes_numero_versao_check": {
+          "name": "simulacoes_numero_versao_check",
+          "value": "\"simulacoes_fiscais\".\"numero_versao\" >= 1"
+        },
+        "simulacoes_quantidade_positiva_check": {
+          "name": "simulacoes_quantidade_positiva_check",
+          "value": "\"simulacoes_fiscais\".\"quantidade\" > 0"
+        },
+        "simulacoes_peso_positivo_check": {
+          "name": "simulacoes_peso_positivo_check",
+          "value": "\"simulacoes_fiscais\".\"peso_nf\" > 0"
+        },
+        "simulacoes_valor_positivo_check": {
+          "name": "simulacoes_valor_positivo_check",
+          "value": "\"simulacoes_fiscais\".\"valor\" > 0"
+        },
+        "simulacoes_desconto_nao_negativo_check": {
+          "name": "simulacoes_desconto_nao_negativo_check",
+          "value": "\"simulacoes_fiscais\".\"desconto\" >= 0"
+        },
+        "simulacoes_desconto_teto_check": {
+          "name": "simulacoes_desconto_teto_check",
+          "value": "\"simulacoes_fiscais\".\"desconto\" <= \"simulacoes_fiscais\".\"valor\""
+        },
+        "simulacoes_liquido_check": {
+          "name": "simulacoes_liquido_check",
+          "value": "\"simulacoes_fiscais\".\"valor_liquido\" = \"simulacoes_fiscais\".\"valor\" - \"simulacoes_fiscais\".\"desconto\""
+        },
+        "simulacoes_base_flag_check": {
+          "name": "simulacoes_base_flag_check",
+          "value": "\"simulacoes_fiscais\".\"base_difere_bruto\" = (\"simulacoes_fiscais\".\"base_tributavel\" <> \"simulacoes_fiscais\".\"valor\")"
+        },
+        "simulacoes_competencia_check": {
+          "name": "simulacoes_competencia_check",
+          "value": "\"simulacoes_fiscais\".\"competencia\" ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'"
+        },
+        "simulacoes_situacao_check": {
+          "name": "simulacoes_situacao_check",
+          "value": "\"simulacoes_fiscais\".\"situacao\" = 'CALCULADA'"
+        },
+        "simulacoes_versao_positiva_check": {
+          "name": "simulacoes_versao_positiva_check",
+          "value": "\"simulacoes_fiscais\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.cenarios_regressao": {
+      "name": "cenarios_regressao",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "homologacao_id": {
+          "name": "homologacao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "simulacao_id": {
+          "name": "simulacao_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_cenarios_homologacao_simulacao": {
+          "name": "uq_cenarios_homologacao_simulacao",
+          "columns": [
+            {
+              "expression": "homologacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "simulacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"cenarios_regressao\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cenarios_homologacao": {
+          "name": "idx_cenarios_homologacao",
+          "columns": [
+            {
+              "expression": "homologacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cenarios_simulacao": {
+          "name": "idx_cenarios_simulacao",
+          "columns": [
+            {
+              "expression": "simulacao_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cenarios_criado_por": {
+          "name": "idx_cenarios_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_cenarios_atualizado_por": {
+          "name": "idx_cenarios_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "cenarios_regressao_homologacao_id_homologacoes_regras_id_fk": {
+          "name": "cenarios_regressao_homologacao_id_homologacoes_regras_id_fk",
+          "tableFrom": "cenarios_regressao",
+          "tableTo": "homologacoes_regras",
+          "columnsFrom": [
+            "homologacao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cenarios_regressao_simulacao_id_simulacoes_fiscais_id_fk": {
+          "name": "cenarios_regressao_simulacao_id_simulacoes_fiscais_id_fk",
+          "tableFrom": "cenarios_regressao",
+          "tableTo": "simulacoes_fiscais",
+          "columnsFrom": [
+            "simulacao_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cenarios_regressao_criado_por_id_usuarios_id_fk": {
+          "name": "cenarios_regressao_criado_por_id_usuarios_id_fk",
+          "tableFrom": "cenarios_regressao",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "cenarios_regressao_atualizado_por_id_usuarios_id_fk": {
+          "name": "cenarios_regressao_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "cenarios_regressao",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "cenarios_versao_positiva_check": {
+          "name": "cenarios_versao_positiva_check",
+          "value": "\"cenarios_regressao\".\"versao\" >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.homologacoes_regras": {
+      "name": "homologacoes_regras",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "regra_id": {
+          "name": "regra_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "situacao": {
+          "name": "situacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'EM_REVISAO'"
+        },
+        "justificativa": {
+          "name": "justificativa",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "aprovado_por_id": {
+          "name": "aprovado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aprovado_em": {
+          "name": "aprovado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejeitado_por_id": {
+          "name": "rejeitado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejeitado_em": {
+          "name": "rejeitado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "publicado_por_id": {
+          "name": "publicado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "publicado_em": {
+          "name": "publicado_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "versao": {
+          "name": "versao",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "criado_por_id": {
+          "name": "criado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atualizado_por_id": {
+          "name": "atualizado_por_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "uq_homologacoes_codigo": {
+          "name": "uq_homologacoes_codigo",
+          "columns": [
+            {
+              "expression": "codigo",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"homologacoes_regras\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "uq_homologacoes_regra_aberta": {
+          "name": "uq_homologacoes_regra_aberta",
+          "columns": [
+            {
+              "expression": "regra_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"homologacoes_regras\".\"deleted_at\" IS NULL AND \"homologacoes_regras\".\"situacao\" IN ('EM_REVISAO','APROVADA','PUBLICADA')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_regra": {
+          "name": "idx_homologacoes_regra",
+          "columns": [
+            {
+              "expression": "regra_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_situacao": {
+          "name": "idx_homologacoes_situacao",
+          "columns": [
+            {
+              "expression": "situacao",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_criado_por": {
+          "name": "idx_homologacoes_criado_por",
+          "columns": [
+            {
+              "expression": "criado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_atualizado_por": {
+          "name": "idx_homologacoes_atualizado_por",
+          "columns": [
+            {
+              "expression": "atualizado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_aprovado_por": {
+          "name": "idx_homologacoes_aprovado_por",
+          "columns": [
+            {
+              "expression": "aprovado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_rejeitado_por": {
+          "name": "idx_homologacoes_rejeitado_por",
+          "columns": [
+            {
+              "expression": "rejeitado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_homologacoes_publicado_por": {
+          "name": "idx_homologacoes_publicado_por",
+          "columns": [
+            {
+              "expression": "publicado_por_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "homologacoes_regras_regra_id_regras_tributarias_id_fk": {
+          "name": "homologacoes_regras_regra_id_regras_tributarias_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "regras_tributarias",
+          "columnsFrom": [
+            "regra_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "homologacoes_regras_aprovado_por_id_usuarios_id_fk": {
+          "name": "homologacoes_regras_aprovado_por_id_usuarios_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "aprovado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "homologacoes_regras_rejeitado_por_id_usuarios_id_fk": {
+          "name": "homologacoes_regras_rejeitado_por_id_usuarios_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "rejeitado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "homologacoes_regras_publicado_por_id_usuarios_id_fk": {
+          "name": "homologacoes_regras_publicado_por_id_usuarios_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "publicado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "homologacoes_regras_criado_por_id_usuarios_id_fk": {
+          "name": "homologacoes_regras_criado_por_id_usuarios_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "homologacoes_regras_atualizado_por_id_usuarios_id_fk": {
+          "name": "homologacoes_regras_atualizado_por_id_usuarios_id_fk",
+          "tableFrom": "homologacoes_regras",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "atualizado_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "homologacoes_codigo_formato_check": {
+          "name": "homologacoes_codigo_formato_check",
+          "value": "\"homologacoes_regras\".\"codigo\" ~ '^[1-9][0-9]{0,17}$'"
+        },
+        "homologacoes_situacao_check": {
+          "name": "homologacoes_situacao_check",
+          "value": "\"homologacoes_regras\".\"situacao\" IN ('EM_REVISAO','APROVADA','REJEITADA','PUBLICADA')"
+        },
+        "homologacoes_versao_positiva_check": {
+          "name": "homologacoes_versao_positiva_check",
+          "value": "\"homologacoes_regras\".\"versao\" >= 1"
+        },
+        "homologacoes_descricao_preenchida_check": {
+          "name": "homologacoes_descricao_preenchida_check",
+          "value": "btrim(\"homologacoes_regras\".\"descricao\") <> ''"
+        },
+        "homologacoes_descricao_tamanho_check": {
+          "name": "homologacoes_descricao_tamanho_check",
+          "value": "char_length(btrim(\"homologacoes_regras\".\"descricao\")) BETWEEN 3 AND 500"
+        },
+        "homologacoes_aprovada_check": {
+          "name": "homologacoes_aprovada_check",
+          "value": "\"homologacoes_regras\".\"situacao\" <> 'APROVADA' OR (\"homologacoes_regras\".\"aprovado_por_id\" IS NOT NULL AND \"homologacoes_regras\".\"aprovado_em\" IS NOT NULL)"
+        },
+        "homologacoes_rejeitada_check": {
+          "name": "homologacoes_rejeitada_check",
+          "value": "\"homologacoes_regras\".\"situacao\" <> 'REJEITADA' OR (\"homologacoes_regras\".\"rejeitado_por_id\" IS NOT NULL AND \"homologacoes_regras\".\"rejeitado_em\" IS NOT NULL)"
+        },
+        "homologacoes_publicada_check": {
+          "name": "homologacoes_publicada_check",
+          "value": "\"homologacoes_regras\".\"situacao\" <> 'PUBLICADA' OR (\"homologacoes_regras\".\"aprovado_por_id\" IS NOT NULL AND \"homologacoes_regras\".\"aprovado_em\" IS NOT NULL AND \"homologacoes_regras\".\"publicado_por_id\" IS NOT NULL AND \"homologacoes_regras\".\"publicado_em\" IS NOT NULL)"
+        },
+        "homologacoes_rejeitada_sem_aprovador_check": {
+          "name": "homologacoes_rejeitada_sem_aprovador_check",
+          "value": "\"homologacoes_regras\".\"situacao\" <> 'REJEITADA' OR \"homologacoes_regras\".\"aprovado_por_id\" IS NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.centros_custo": {
       "name": "centros_custo",
       "schema": "",
@@ -11917,492 +16512,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.politica_simulacoes": {
-      "name": "politica_simulacoes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "politica_id": {
-          "name": "politica_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "versao_numero": {
-          "name": "versao_numero",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "valor": {
-          "name": "valor",
-          "type": "numeric(15, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "debito": {
-          "name": "debito",
-          "type": "numeric(15, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "credito": {
-          "name": "credito",
-          "type": "numeric(15, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "idx_politica_simulacoes_politica": {
-          "name": "idx_politica_simulacoes_politica",
-          "columns": [
-            {
-              "expression": "politica_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "politica_simulacoes_politica_id_politicas_contabilizacao_id_fk": {
-          "name": "politica_simulacoes_politica_id_politicas_contabilizacao_id_fk",
-          "tableFrom": "politica_simulacoes",
-          "tableTo": "politicas_contabilizacao",
-          "columnsFrom": [
-            "politica_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "chk_politica_simulacoes_balance": {
-          "name": "chk_politica_simulacoes_balance",
-          "value": "\"politica_simulacoes\".\"debito\" = \"politica_simulacoes\".\"credito\" AND \"politica_simulacoes\".\"valor\" = \"politica_simulacoes\".\"debito\""
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.politica_versoes": {
-      "name": "politica_versoes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "politica_id": {
-          "name": "politica_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "numero": {
-          "name": "numero",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conta_debito_id": {
-          "name": "conta_debito_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conta_credito_id": {
-          "name": "conta_credito_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "centro_custo_id": {
-          "name": "centro_custo_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "vigencia_inicio": {
-          "name": "vigencia_inicio",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "situacao": {
-          "name": "situacao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "justificativa": {
-          "name": "justificativa",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "responsavel_id": {
-          "name": "responsavel_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "aprovador_id": {
-          "name": "aprovador_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "uq_politica_versoes_numero": {
-          "name": "uq_politica_versoes_numero",
-          "columns": [
-            {
-              "expression": "politica_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "numero",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"politica_versoes\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_politica": {
-          "name": "idx_politica_versoes_politica",
-          "columns": [
-            {
-              "expression": "politica_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_debito": {
-          "name": "idx_politica_versoes_debito",
-          "columns": [
-            {
-              "expression": "conta_debito_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_credito": {
-          "name": "idx_politica_versoes_credito",
-          "columns": [
-            {
-              "expression": "conta_credito_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_centro": {
-          "name": "idx_politica_versoes_centro",
-          "columns": [
-            {
-              "expression": "centro_custo_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_responsavel": {
-          "name": "idx_politica_versoes_responsavel",
-          "columns": [
-            {
-              "expression": "responsavel_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_politica_versoes_aprovador": {
-          "name": "idx_politica_versoes_aprovador",
-          "columns": [
-            {
-              "expression": "aprovador_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "politica_versoes_politica_id_politicas_contabilizacao_id_fk": {
-          "name": "politica_versoes_politica_id_politicas_contabilizacao_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "politicas_contabilizacao",
-          "columnsFrom": [
-            "politica_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "politica_versoes_conta_debito_id_contas_contabeis_id_fk": {
-          "name": "politica_versoes_conta_debito_id_contas_contabeis_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "contas_contabeis",
-          "columnsFrom": [
-            "conta_debito_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "politica_versoes_conta_credito_id_contas_contabeis_id_fk": {
-          "name": "politica_versoes_conta_credito_id_contas_contabeis_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "contas_contabeis",
-          "columnsFrom": [
-            "conta_credito_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "politica_versoes_centro_custo_id_centros_custo_id_fk": {
-          "name": "politica_versoes_centro_custo_id_centros_custo_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "centros_custo",
-          "columnsFrom": [
-            "centro_custo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "politica_versoes_responsavel_id_usuarios_id_fk": {
-          "name": "politica_versoes_responsavel_id_usuarios_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "usuarios",
-          "columnsFrom": [
-            "responsavel_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "politica_versoes_aprovador_id_usuarios_id_fk": {
-          "name": "politica_versoes_aprovador_id_usuarios_id_fk",
-          "tableFrom": "politica_versoes",
-          "tableTo": "usuarios",
-          "columnsFrom": [
-            "aprovador_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "chk_politica_versoes_situacao": {
-          "name": "chk_politica_versoes_situacao",
-          "value": "\"politica_versoes\".\"situacao\" IN ('DRAFT','REVIEW','APPROVED','REJECTED','SUSPENDED')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.politicas_contabilizacao": {
-      "name": "politicas_contabilizacao",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "codigo": {
-          "name": "codigo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tipo_evento": {
-          "name": "tipo_evento",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "competencia": {
-          "name": "competencia",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "uq_politicas_contabilizacao_codigo": {
-          "name": "uq_politicas_contabilizacao_codigo",
-          "columns": [
-            {
-              "expression": "codigo",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"politicas_contabilizacao\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "chk_politicas_tipo_evento": {
-          "name": "chk_politicas_tipo_evento",
-          "value": "\"politicas_contabilizacao\".\"tipo_evento\" IN ('LIQUIDACAO','REGISTRO','CANCELAMENTO','ESTORNO','TARIFA')"
-        },
-        "chk_politicas_competencia_dia": {
-          "name": "chk_politicas_competencia_dia",
-          "value": "extract(day from \"politicas_contabilizacao\".\"competencia\") = 1"
-        }
-      },
       "isRLSEnabled": false
     }
   },

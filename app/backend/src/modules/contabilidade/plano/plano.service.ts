@@ -1,6 +1,6 @@
 import { ConflictException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
@@ -637,7 +637,16 @@ export class PlanoContasService {
   }
 
   private async consultar(query: ListarPlanoQuery, paginar: boolean, codigoExato?: string) {
-    const ultima = this.db
+    // Lista e total no mesmo instantâneo: sem isso, uma gravação entre as duas consultas gera itens e total divergentes.
+    if (!paginar) return this.consultarEm(this.db, query, false, codigoExato);
+    return this.db.transaction(
+      (tx) => this.consultarEm(tx, query, true, codigoExato),
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
+  }
+
+  private async consultarEm(executor: Banco | Tx, query: ListarPlanoQuery, paginar: boolean, codigoExato?: string) {
+    const ultima = executor
       .select({
         contaId: contaVersoes.contaId,
         numero: sql<number>`max(${contaVersoes.numero})`.as('numero_max'),
@@ -654,19 +663,20 @@ export class PlanoContasService {
     if (query.situacao) filtros.push(eq(contaVersoes.situacao, query.situacao));
     if (codigoExato) filtros.push(eq(contasContabeis.codigo, codigoExato));
     if (query.q) {
-      const termo = `%${query.q}%`;
+      const termo = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
       const busca = or(
-        ilike(contaVersoes.nome, termo),
-        ilike(contasContabeis.codigo, termo),
-        ilike(contaVersoes.grupo, termo),
-        ilike(centrosCusto.nome, termo),
+        sql`${contaVersoes.nome} ilike ${termo} escape '\\'`,
+        sql`${contasContabeis.codigo} ilike ${termo} escape '\\'`,
+        sql`${contaVersoes.grupo} ilike ${termo} escape '\\'`,
+        sql`${centrosCusto.nome} ilike ${termo} escape '\\'`,
       );
       if (busca) filtros.push(busca);
     }
     const onde = and(...filtros);
     const coluna = colunaOrdem(query.ordenar);
-    const ordem = query.direcao === 'desc' ? desc(coluna) : asc(coluna);
-    const base = this.db
+    // codigo é único (uma linha por conta, a última versão): desempate estável para paginar sem repetir nem perder linha.
+    const ordem = query.direcao === 'desc' ? [desc(coluna), desc(contasContabeis.codigo)] : [asc(coluna), asc(contasContabeis.codigo)];
+    const base = executor
       .select({
         codigo: contasContabeis.codigo,
         nome: contaVersoes.nome,
@@ -691,11 +701,11 @@ export class PlanoContasService {
       .innerJoin(usuarios, eq(usuarios.id, contaVersoes.responsavelId))
       .leftJoin(contaPai, eq(contaPai.id, contaVersoes.contaPaiId))
       .where(onde)
-      .orderBy(ordem);
+      .orderBy(...ordem);
     const linhas = paginar
       ? await base.limit(PAGINA).offset((query.pagina - 1) * PAGINA)
       : await base;
-    const [contagem] = await this.db
+    const [contagem] = await executor
       .select({ total: sql<number>`count(*)::int` })
       .from(contaVersoes)
       .innerJoin(ultima, eq(contaVersoes.contaId, ultima.contaId))

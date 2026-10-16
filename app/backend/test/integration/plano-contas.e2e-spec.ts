@@ -880,6 +880,68 @@ describe('Plano de contas', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
 
+  describe('listagem estável', () => {
+    const base = { pagina: 1, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' } as const;
+
+    it('pagina sem duplicar nem perder linha em empate, em cada ordenação e sentido', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (let i = 1; i <= 100; i += 1) {
+        await service.criar(dtoBase({ codigo: String(i).padStart(4, '0'), nome: 'Igual' }), userId);
+      }
+      // Reescreve as linhas em ordem aleatória: a ordem física deixa de coincidir com o código.
+      const ids = await db.execute(sql`select id from conta_versoes order by random()`);
+      for (const linha of ids.rows as { id: string }[]) {
+        await db.execute(sql`update conta_versoes set justificativa = justificativa || '.' where id = ${linha.id}`);
+      }
+      for (const ordenar of ['contaContabil', 'naturezaConta', 'centroCusto', 'vigenciaInicio', 'vigenciaFim'] as const) {
+        for (const direcao of ['asc', 'desc'] as const) {
+          const codigos: string[] = [];
+          let total = 0;
+          for (let pagina = 1; pagina <= 5; pagina += 1) {
+            const r = await service.listar({ ...base, ordenar, direcao, pagina });
+            total = r.total;
+            codigos.push(...r.itens.map((i) => i.codigo));
+          }
+          expect(total).toBe(100);
+          expect(codigos).toHaveLength(100);
+          expect(new Set(codigos).size).toBe(100);
+          const csv = (await service.exportarCsv({ ...base, ordenar, direcao })).replace('﻿', '').split('\n');
+          expect(csv).toHaveLength(101);
+        }
+      }
+    });
+
+    it('lista e total vêm do mesmo instante sob escrita concorrente', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '000' }), userId);
+      let gravando = true;
+      const gravacao = (async () => {
+        for (let i = 1; i <= 60; i += 1) await service.criar(dtoBase({ codigo: String(i).padStart(3, '0') }), userId);
+        gravando = false;
+      })();
+      const leituras: { n: number; total: number }[] = [];
+      const leitor = async () => {
+        while (gravando) {
+          const r = await service.listar({ ...base, pagina: 1 });
+          leituras.push({ n: r.itens.length, total: r.total });
+        }
+      };
+      await Promise.all([gravacao, leitor(), leitor(), leitor(), leitor()]);
+      expect(leituras.length).toBeGreaterThan(5);
+      for (const l of leituras) expect(l.n).toBe(Math.min(l.total, 20));
+    });
+
+    it('busca trata % e _ como texto literal', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: 'A1', nome: 'Caixa_100%' }), userId);
+      await service.criar(dtoBase({ codigo: 'A2', nome: 'Caixa geral' }), userId);
+      expect((await service.listar({ ...base, q: '%' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: '_' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: 'Caixa_100%' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: 'Caixa' })).total).toBe(2);
+    });
+  });
+
   it('csv exporta a visão inteira, não a página', async () => {
     await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
     for (let i = 1; i <= 29; i += 1) {
