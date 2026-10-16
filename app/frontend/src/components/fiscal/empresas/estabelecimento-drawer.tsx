@@ -116,7 +116,8 @@ export function EstabelecimentoDrawer({
   const sujo = aberto && instantaneo(empresaId, cnpj, dados, cnaes, justificativa) !== baseline.current;
 
   const tentarFechar = () => {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   };
 
@@ -152,6 +153,7 @@ export function EstabelecimentoDrawer({
 
   const salvar = async (evento: React.FormEvent) => {
     evento.preventDefault();
+    if (salvando) return;
     setErroGeral(null);
     if (!validar()) return;
     const motivo = normalizarJustificativa(justificativa);

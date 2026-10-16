@@ -92,7 +92,8 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
   const sujo = aberto && instantaneo(dados, cnaes, justificativa) !== baseline.current;
 
   const tentarFechar = () => {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   };
 
@@ -130,6 +131,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
   };
 
   const salvar = async (submeter: boolean) => {
+    if (salvando) return;
     setErroGeral(null);
     if (!validar()) return;
     const igualAoAprovado =

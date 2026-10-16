@@ -77,7 +77,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   }, [decisao]);
 
   const executar = async (confirmarTroca: boolean) => {
-    if (!decisao) return;
+    if (!decisao || processando) return;
     const texto = normalizarJustificativa(justificativa);
     if (!justificativaValida(texto)) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');

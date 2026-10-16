@@ -198,6 +198,7 @@ export function EnquadramentoDrawer({
   }
 
   async function salvar() {
+    if (enviando) return;
     const local = verificar();
     if (local) {
       setAvisos(local);
@@ -219,7 +220,7 @@ export function EnquadramentoDrawer({
   }
 
   return (
-    <Sheet open={aberto} onOpenChange={(open) => { if (!open) onFechar(); }}>
+    <Sheet open={aberto} onOpenChange={(open) => { if (!open && !enviando) onFechar(); }}>
       <SheetContent
         onCloseAutoFocus={retornoFoco}
         onOpenAutoFocus={(event) => {

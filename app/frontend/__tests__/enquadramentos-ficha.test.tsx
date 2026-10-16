@@ -484,6 +484,40 @@ describe('duplicar perfil', () => {
     expect(envio.corpo?.prioridade).toBe(7);
   });
 
+  it('Escape não fecha o diálogo durante o envio em voo', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirDuplicar(user);
+    await user.type(within(dialogo).getByLabelText('Motivo da duplicação'), 'Copia para o fim do ano');
+    let liberar: (r: Response) => void = () => undefined;
+    const anterior = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+    global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
+      if (String(entrada).endsWith('/duplicar')) return new Promise<Response>((resolve) => { liberar = resolve; });
+      return anterior(entrada, init);
+    }) as unknown as typeof fetch;
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(dialogo).getByLabelText('Motivo da duplicação')).toHaveValue('Copia para o fim do ano');
+    await act(async () => { liberar(json(200, detalhe)); });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Duplicar perfil' })).not.toBeInTheDocument());
+  });
+
+  it('ficha removida (404) avisa registro removido, mantém o digitado e bloqueia o reenvio', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirDuplicar(user);
+    await user.type(within(dialogo).getByLabelText('Motivo da duplicação'), 'Copia para o fim do ano');
+    const anterior = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+    global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
+      if (String(entrada).endsWith('/duplicar')) return envelope(404, { message: 'Enquadramento não encontrado.', codigo: 'NAO_ENCONTRADO' });
+      return anterior(entrada, init);
+    }) as unknown as typeof fetch;
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    expect(await within(dialogo).findByText(/foi removido por outro usuário/)).toBeInTheDocument();
+    expect(within(dialogo).queryByRole('button', { name: 'Recarregar dados' })).not.toBeInTheDocument();
+    expect(within(dialogo).getByLabelText('Motivo da duplicação')).toHaveValue('Copia para o fim do ano');
+    expect(within(dialogo).getByRole('button', { name: 'Duplicar' })).toBeDisabled();
+  });
+
   it('motivo só com caracteres de largura zero é enviado normalizado', async () => {
     const { user } = renderizar();
     const dialogo = await abrirDuplicar(user);
