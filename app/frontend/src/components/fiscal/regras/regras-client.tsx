@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
-import { baixarArquivo } from '@/lib/fiscal-comum-ui';
+import { baixarArquivo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   CHAVE_LISTA,
@@ -32,7 +32,7 @@ import { useListaFiscal } from '../comum/use-lista-fiscal';
 import { AbasDetalhe, type IdAba, type OcorrenciasRegra } from './abas-detalhe';
 import { CodigoTributarioDialog } from './codigo-tributario-dialog';
 import { CompararDialog } from './comparar-dialog';
-import { RegraDrawer, type FalhaSalvar, type SelecaoCodigoTributario } from './regra-drawer';
+import { RegraDrawer, type SelecaoCodigoTributario } from './regra-drawer';
 import { VersaoDialog } from './versao-dialog';
 
 type AcaoRegra = 'submeter' | 'aprovar' | 'aposentar';

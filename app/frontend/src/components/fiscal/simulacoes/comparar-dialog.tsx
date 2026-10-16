@@ -1,46 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { Diferenca, LinhaSimulacao } from '@/lib/fiscal-simulacoes';
-import { useRetornoFoco } from '../empresas/use-retorno-foco';
+import { rotuloVersao, simulacoesApi, type DetalheSimulacao } from '@/lib/fiscal-simulacoes';
+import { CompararVersoesDialog } from '../comum/comparar-versoes-dialog';
 
 interface Props {
   aberto: boolean;
-  versoes: LinhaSimulacao[];
-  diferencas: Diferenca[];
+  detalhe: DetalheSimulacao | null;
   onFechar: () => void;
-  onComparar: (id: string) => void;
 }
 
-export function CompararDialog({ aberto, versoes, diferencas, onFechar, onComparar }: Props) {
-  const retornoFoco = useRetornoFoco(aberto);
-  const [com, setCom] = useState('');
+/** Compara a versão aberta com outra versão do mesmo código (código, versão, situação e competência no rótulo). */
+export function CompararDialog({ aberto, detalhe, onFechar }: Props) {
+  if (!detalhe) return null;
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
-      <DialogContent aria-describedby={undefined} onCloseAutoFocus={retornoFoco}>
-        <DialogHeader>
-          <DialogTitle>Comparar versões</DialogTitle>
-        </DialogHeader>
-        <div className="grid gap-3 px-4 pb-4 text-sm">
-          <label className="grid gap-1 text-xs">Outra versão
-            <select aria-label="Outra versão" className="h-8 rounded-md border px-2" value={com} onChange={(e) => setCom(e.target.value)}>
-              <option value="">Selecione</option>
-              {versoes.map((versao) => (
-                <option key={versao.id} value={versao.id}>{versao.cliente} · {versao.produto}</option>
-              ))}
-            </select>
-          </label>
-          <Button type="button" variant="secondary" onClick={() => com && onComparar(com)}>Comparar versões</Button>
-          <ul>
-            {diferencas.map((item) => (
-              <li key={item.campo}>{item.campo}: {item.antes} → {item.depois}</li>
-            ))}
-          </ul>
-          <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <CompararVersoesDialog
+      aberto={aberto}
+      titulo="Comparar versões"
+      onFechar={onFechar}
+      carregarOpcoes={async () => (await simulacoesApi.versoesDoCodigo(detalhe.codigo))
+        .filter((versao) => versao.id !== detalhe.id)
+        .sort((a, b) => a.numeroVersao - b.numeroVersao)
+        .map((versao) => ({ id: versao.id, rotulo: rotuloVersao(versao) }))}
+      comparar={async (outraId) => (await simulacoesApi.comparar(detalhe.id, outraId)).diferencas}
+    />
   );
 }

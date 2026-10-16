@@ -3,11 +3,10 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { errosPorCampo } from '@/lib/fiscal-comum-ui';
+import { errosPorCampo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { formatarPercentualPtBr, normalizarPercentual, type CorpoRegra, type DetalheRegra } from '@/lib/fiscal-regras';
 import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
-import type { FalhaSalvar } from './regra-drawer';
 
 interface Props {
   aberto: boolean;

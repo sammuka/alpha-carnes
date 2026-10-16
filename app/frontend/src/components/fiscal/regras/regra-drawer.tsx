@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { errosPorCampo } from '@/lib/fiscal-comum-ui';
+import { buscarEnquadramentos, errosPorCampo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { mascararCfop, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   ROTULOS_IBS,
@@ -13,7 +13,6 @@ import {
   ErroRegra,
   buscarBeneficios,
   buscarClassificacoes,
-  buscarEnquadramentos,
   formatarPercentualPtBr,
   mensagemDeRegra,
   normalizarPercentual,
@@ -30,11 +29,6 @@ export interface SelecaoCodigoTributario {
   tipo: 'beneficio' | 'classificacao';
   id: string;
   rotulo: string;
-}
-
-export interface FalhaSalvar {
-  mensagem: string;
-  porCampo: Record<string, string>;
 }
 
 interface Props {

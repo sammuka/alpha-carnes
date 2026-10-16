@@ -1,4 +1,5 @@
 import { extrairCodigoErro, extrairErrosPorCampo, extrairMensagemErro } from '@/lib/error-message';
+import { mensagemRotulada, TEXTO_SERVICO_INDISPONIVEL } from '@/lib/fiscal-comum-ui';
 
 export function normalizarDinheiro(entrada: string): string | null {
   const limpo = entrada.trim().replace(/\s/g, '').replace(/^R\$/i, '');
@@ -90,6 +91,23 @@ const MENSAGENS: Record<string, string> = {
   CONFLITO_CONCORRENTE: 'O registro foi alterado por outro usuário. Recarregue para continuar.',
 };
 
+/** Rótulos da tela para os campos que a validação do servidor aponta. */
+export const ROTULOS_CAMPOS: Record<string, string> = {
+  estabelecimentoId: 'Estabelecimento',
+  operacaoId: 'Operação',
+  clienteId: 'Cliente',
+  produtoId: 'Produto',
+  ncmId: 'Classificação fiscal (NCM)',
+  quantidade: 'Quantidade',
+  pesoNf: 'Peso informado na nota (kg)',
+  valor: 'Valor',
+  desconto: 'Desconto',
+  competencia: 'Competência',
+  enquadramentoId: 'Enquadramento fiscal',
+  justificativa: 'Motivo da alteração',
+  versao: 'Versão',
+};
+
 export class ErroSimulacao extends Error {
   constructor(
     mensagem: string,
@@ -105,16 +123,24 @@ export class ErroSimulacao extends Error {
 export function mensagemDeSimulacao(erro: ErroSimulacao): string {
   const fechada = erro.codigo ? MENSAGENS[erro.codigo] : undefined;
   if (fechada) return fechada;
-  if (erro.status >= 500 || erro.status === 0) return 'Serviço indisponível no momento. Tente novamente.';
+  if (erro.status >= 500 || erro.status === 0) return TEXTO_SERVICO_INDISPONIVEL;
   return erro.message;
 }
 
 const BASE = '/api/erp/fiscal/simulacoes';
 
-async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
-  let res: Response;
+function criarErro(status: number, body: unknown): ErroSimulacao {
+  const codigo = extrairCodigoErro(body);
+  const porCampo = extrairErrosPorCampo(body);
+  const fechada = codigo ? MENSAGENS[codigo] : undefined;
+  const indisponivel = status >= 500 ? TEXTO_SERVICO_INDISPONIVEL : null;
+  const rotulada = status === 400 ? mensagemRotulada(porCampo, ROTULOS_CAMPOS) : null;
+  return new ErroSimulacao(fechada || indisponivel || rotulada || extrairMensagemErro(body, 'Falha na operação.'), status, codigo, porCampo);
+}
+
+async function enviar(metodo: string, caminho: string, corpo?: unknown): Promise<Response> {
   try {
-    res = await fetch(caminho, {
+    return await fetch(caminho, {
       method: metodo,
       cache: 'no-store',
       ...(corpo === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }),
@@ -122,15 +148,19 @@ async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Prom
   } catch {
     throw new ErroSimulacao('Serviço indisponível. Verifique a conexão e tente novamente.', 0, 'SERVICO_INDISPONIVEL', {});
   }
-  if (!res.ok) {
-    const body: unknown = await res.json().catch(() => null);
-    const codigo = extrairCodigoErro(body);
-    const fechada = codigo ? MENSAGENS[codigo] : undefined;
-    const mensagem = fechada || extrairMensagemErro(body, 'Falha na operação.');
-    throw new ErroSimulacao(mensagem, res.status, codigo, extrairErrosPorCampo(body));
-  }
+}
+
+async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
+  const res = await enviar(metodo, caminho, corpo);
+  if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
   if (res.status === 204) return undefined as T;
   return (await res.json().catch(() => null)) as T;
+}
+
+async function baixar(caminho: string): Promise<Blob> {
+  const res = await enviar('GET', caminho);
+  if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
+  return res.blob();
 }
 
 function qs(params: Record<string, string | number | undefined>): string {
@@ -141,8 +171,6 @@ function qs(params: Record<string, string | number | undefined>): string {
   const texto = p.toString();
   return texto ? `?${texto}` : '';
 }
-
-export interface OpcaoCombo { id: string; rotulo: string }
 
 export interface FiltrosLista {
   search: string;
@@ -168,6 +196,11 @@ export const FILTROS_LISTA: FiltrosLista = {
 
 export interface LinhaSimulacao {
   id: string;
+  /** Linhagem, versão, situação e competência identificam a versão; não são colunas da grade. */
+  codigo: string;
+  numeroVersao: number;
+  situacao: string;
+  competenciaRotulo: string;
   cliente: string;
   produto: string;
   valor: string;
@@ -255,9 +288,43 @@ export interface PreCondicao {
   texto?: string;
 }
 
+/** Dados do enquadramento escolhido, para preencher os cinco combos que ele fixa. */
+export interface EnquadramentoRef {
+  estabelecimentoId: string;
+  estabelecimentoNome: string;
+  operacaoId: string;
+  operacaoRotulo: string;
+  clienteId: string;
+  clienteNome: string;
+  produtoId: string;
+  produtoNome: string;
+  ncmId: string;
+  ncmCodigo: string;
+  ncmDescricao: string;
+}
+
+export interface Paginado<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Filtros que valem para a lista, as contagens e a exportação. */
+const filtrosDe = (f: FiltrosLista) => ({
+  search: f.search,
+  estabelecimentoId: f.estabelecimentoId,
+  clienteId: f.clienteId,
+  produtoId: f.produtoId,
+  competencia: f.competencia,
+});
+
 export const simulacoesApi = {
-  listar: (filtros: FiltrosLista) => chamar<{ data: LinhaSimulacao[]; total: number }>('GET', `${BASE}${qs({ ...filtros })}`),
-  contagens: (filtros: FiltrosLista) => chamar<Contagens>('GET', `${BASE}/contagens${qs({ ...filtros })}`),
+  listar: (filtros: FiltrosLista) => chamar<Paginado<LinhaSimulacao>>('GET', `${BASE}${qs({ ...filtros, pageSize: 20 })}`),
+  contagens: (filtros: FiltrosLista) => chamar<Contagens>('GET', `${BASE}/contagens${qs(filtrosDe(filtros))}`),
+  /** Versões da mesma linhagem (mesmo código), com número da versão, situação e competência. */
+  versoesDoCodigo: async (codigo: string) =>
+    (await chamar<Paginado<LinhaSimulacao>>('GET', `${BASE}${qs({ codigo, pageSize: 100 })}`)).data,
   obter: (id: string) => chamar<DetalheSimulacao>('GET', `${BASE}/${id}`),
   criar: (corpo: CorpoSimulacao) => chamar<DetalheSimulacao>('POST', BASE, corpo),
   versao: (id: string, corpo: CorpoSimulacao & { versao: number }) => chamar<DetalheSimulacao>('POST', `${BASE}/${id}/versoes`, corpo),
@@ -265,16 +332,38 @@ export const simulacoesApi = {
   historico: (id: string) => chamar<EventoHistorico[]>('GET', `${BASE}/${id}/historico`),
   preCondicoes: (id: string) => chamar<PreCondicao[]>('GET', `${BASE}/${id}/pre-condicoes`),
   comparar: (id: string, com: string) => chamar<{ diferencas: Diferenca[] }>('GET', `${BASE}/${id}/comparar${qs({ com })}`),
+  enquadramento: (id: string) => chamar<EnquadramentoRef>('GET', `/api/erp/fiscal/enquadramentos/${encodeURIComponent(id)}`),
+  /** CSV da visão atual: mesmos filtros e ordenação da grade. */
+  exportar: (filtros: FiltrosLista) => baixar(`${BASE}/exportacao${qs({ ...filtrosDe(filtros), sort: filtros.sort, dir: filtros.dir })}`),
+  exportarMemoria: (id: string) => baixar(`${BASE}/${id}/memoria`),
 };
 
-function linhasDe(body: unknown): Record<string, unknown>[] {
-  if (body && typeof body === 'object' && Array.isArray((body as { data?: unknown }).data)) {
-    return (body as { data: Record<string, unknown>[] }).data;
-  }
-  return [];
+/** Texto do item do combo de versões: código, número da versão, situação e competência. */
+export function rotuloVersao(linha: Pick<LinhaSimulacao, 'codigo' | 'numeroVersao' | 'situacao' | 'competenciaRotulo'>): string {
+  return `${linha.codigo} · versão ${linha.numeroVersao} · ${linha.situacao} · ${linha.competenciaRotulo}`;
 }
 
-export async function opcoesDe(caminho: string, rotulo: (linha: Record<string, unknown>) => string): Promise<OpcaoCombo[]> {
-  const body = await chamar<unknown>('GET', caminho);
-  return linhasDe(body).map((linha) => ({ id: String(linha.id ?? ''), rotulo: rotulo(linha) })).filter((item) => item.id);
+/** Validação local dos números, com as mesmas regras do servidor. */
+export const MSG_DINHEIRO = 'Informe um valor com até duas casas decimais.';
+export const MSG_QUANTIDADE = 'Informe uma quantidade maior que zero, com até três casas.';
+export const MSG_PESO = 'Informe o peso informado na nota (kg) maior que zero, com até três casas.';
+
+export function validarDinheiro(entrada: string, { exigirPositivo }: { exigirPositivo: boolean }): string | null {
+  const canon = normalizarDinheiro(entrada);
+  if (canon === null) return MSG_DINHEIRO;
+  if (exigirPositivo && !/[1-9]/.test(canon)) return 'Informe um valor maior que zero.';
+  return null;
+}
+
+export function validarEscala(entrada: string, inteirosMax: number, mensagem: string): string | null {
+  const canon = normalizarEscala(entrada, inteirosMax);
+  return canon === null || !/[1-9]/.test(canon) ? mensagem : null;
+}
+
+/** Compara dois valores em reais pelos centavos inteiros, sem número de ponto flutuante. */
+export function descontoMaiorQueValor(desconto: string, valor: string): boolean {
+  const d = normalizarDinheiro(desconto);
+  const v = normalizarDinheiro(valor);
+  if (d === null || v === null) return false;
+  return BigInt(d.replace('.', '')) > BigInt(v.replace('.', ''));
 }

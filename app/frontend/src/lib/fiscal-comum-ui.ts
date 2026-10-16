@@ -11,6 +11,12 @@ export const TEXTO_SEM_DIFERENCAS = 'As duas versões não têm diferenças.';
 /** Rótulo do valor "antes" quando a versão não tem origem para comparar. */
 export const ROTULO_NOVO = 'novo';
 
+/** Falha de gravação exibida no formulário: texto geral e erros por campo do servidor. */
+export interface FalhaSalvar {
+  mensagem: string;
+  porCampo: Record<string, string>;
+}
+
 /** Rodapé do protótipo (aplicacao.js L176) sem a palavra "fictícios": `Exibindo N de M registros`. */
 export function textoExibindo(exibidos: number, total: number): string {
   return `Exibindo ${exibidos} de ${total} ${total === 1 ? 'registro' : 'registros'}`;
@@ -81,3 +87,10 @@ export function baixarArquivo(conteudo: Blob, nome: string): void {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+/** Combo de enquadramentos ativos com busca no servidor: "código · operação". */
+export const buscarEnquadramentos = (termo: string) =>
+  buscarCatalogo('/api/erp/fiscal/enquadramentos', termo, (linha) => ({
+    id: linha.situacao === 'INATIVA' ? '' : String(linha.id ?? ''),
+    rotulo: `${String(linha.codigo ?? '')} · ${String(linha.operacao ?? '')}`,
+  }));
