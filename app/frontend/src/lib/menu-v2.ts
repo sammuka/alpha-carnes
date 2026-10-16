@@ -1,14 +1,17 @@
 /**
  * Menu canônico v2 — estrutura de navegação do protótipo (Layout.tsx → ALL_NAV_GROUPS).
- * A visibilidade vem de `perfis.menus_visiveis` (decisão 4 da Onda 3), semeada da matriz de
- * rastreabilidade: o menu mostra exatamente o que a matriz atribui ao perfil, nem mais nem menos.
- * Permissão de API é assunto do backend (RbacGuard) e não filtra menu.
+ * A visibilidade continua vindo de `perfis.menus_visiveis` (decisão 4 da Onda 3), semeada da
+ * matriz de rastreabilidade: o menu mostra o que a matriz atribui ao perfil. O item que declara
+ * `permissao` só aparece se o usuário também tiver essa permissão (fail-closed); os demais itens
+ * não são filtrados por permissão — a permissão de API segue sendo assunto do backend (RbacGuard).
  */
 
 export interface MenuItemDef {
   href: string;
   label: string;
   iconKey: string;
+  /** Permissão exigida além de `menus_visiveis`; ausente = item não filtrado por permissão. */
+  permissao?: string;
 }
 
 export interface MenuGroupDef {
@@ -80,6 +83,41 @@ export const MENU_V2: MenuGroupDef[] = [
     ],
   },
   {
+    title: 'FISCAL',
+    items: [
+      {
+        href: '/fiscal/empresas',
+        label: 'Empresas, estabelecimentos e regime',
+        iconKey: 'Landmark',
+        permissao: 'FISCAL_EMPRESAS_LER',
+      },
+      {
+        href: '/fiscal/enquadramentos',
+        label: 'Operações fiscais e enquadramentos',
+        iconKey: 'Scale',
+        permissao: 'FISCAL_ENQUADRAMENTOS_LER',
+      },
+      {
+        href: '/fiscal/regras',
+        label: 'Editor de regras tributárias',
+        iconKey: 'FileSpreadsheet',
+        permissao: 'FISCAL_REGRAS_LER',
+      },
+      {
+        href: '/fiscal/simulador',
+        label: 'Simulador fiscal e memória de cálculo',
+        iconKey: 'PieChart',
+        permissao: 'FISCAL_SIMULACOES_LER',
+      },
+      {
+        href: '/fiscal/homologacao',
+        label: 'Painel de alterações e homologação de regras',
+        iconKey: 'ClipboardCheck',
+        permissao: 'FISCAL_HOMOLOGACOES_LER',
+      },
+    ],
+  },
+  {
     title: 'CONTABILIDADE',
     items: [
       {
@@ -125,12 +163,19 @@ export interface MenuGrupoVisivel {
 /**
  * Grupos e itens visíveis para a lista de menus do usuário (união dos perfis, vinda de /auth/me).
  * Grupo sem item visível não aparece; href fora do catálogo é ignorado (não inventa entrada de menu).
+ * Item com `permissao` só aparece se a permissão estiver em `permissoes` (fail-closed).
  */
-export function filtrarMenuPorMenusVisiveis(menusVisiveis: string[]): MenuGrupoVisivel[] {
+export function filtrarMenuPorMenusVisiveis(
+  menusVisiveis: string[],
+  permissoes: string[] = [],
+): MenuGrupoVisivel[] {
   const visiveis = new Set(menusVisiveis);
+  const permitidas = new Set(permissoes);
   return MENU_V2.map((grupo) => ({
     title: grupo.title,
-    items: grupo.items.filter((item) => visiveis.has(item.href)),
+    items: grupo.items.filter(
+      (item) => visiveis.has(item.href) && (!item.permissao || permitidas.has(item.permissao)),
+    ),
   })).filter((grupo) => grupo.items.length > 0);
 }
 

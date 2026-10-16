@@ -145,3 +145,105 @@ UPDATE "etiquetas_impressoes" SET "estado" = 'ativa'
  WHERE "estado" = 'emitida' AND "reimpressao" = false
    AND "status_impressao" = 'impressa';
 ```
+
+## E01-T01 — `0044_e01_t01_empresas_estabelecimentos` (expand-only)
+
+Migration gerada por `drizzle-kit generate --name e01_t01_empresas_estabelecimentos`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+seis tabelas novas:
+
+- `empresas`
+- `estabelecimentos` (`UNIQUE (id, empresa_id)` não parcial — D-E01)
+- `estabelecimento_cnaes`
+- `estabelecimento_alteracoes`
+- `estabelecimento_alteracao_cnaes`
+- `regimes_tributarios`
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push); o revert devolve `MENUS_CANONICOS` às 39
+  rotas e o próximo seed reconcilia `menus_visiveis`.
+- Banco: só tabelas folha (nenhuma FK externa aponta para elas até E12-T01/E06-T01). Dev/CI sem dados:
+  remover o schema e gerar a migration de remoção com `drizzle-kit generate` (nunca SQL manual). Com linhas:
+  não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: chave `fiscal.empresas_perfis_autorizados` e permissões `FISCAL_EMPRESAS_*` saem só junto do revert.
+
+## E01-T02 — enquadramentos fiscais e catálogos manuais de CFOP e NCM
+
+Migration gerada por `drizzle-kit generate --name e01_t02_enquadramentos`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+três tabelas novas, nesta ordem de remoção:
+
+- `enquadramentos_fiscais`
+- `ncms`
+- `cfops`
+
+Não há `INSERT` de semente de CFOP ou NCM. Não há colunas de data comercial, fiscal ou efetiva.
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push).
+- Banco: só tabelas folha. Dev/CI sem dados: remover o schema e gerar a migration de remoção com
+  `drizzle-kit generate` (nunca SQL manual), na ordem `enquadramentos_fiscais`, `ncms`, `cfops`.
+  Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: a chave `fiscal.enquadramentos_perfis_autorizados` e as permissões `FISCAL_ENQUADRAMENTOS_*`
+  saem só junto do revert.
+
+## E01-T03 — regras tributárias e catálogos manuais de benefício e classificação
+
+Migration gerada por `drizzle-kit generate --name e01_t03_regras_tributarias`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+três tabelas novas, nesta ordem de remoção:
+
+```sql
+DROP TABLE IF EXISTS regras_tributarias;
+DROP TABLE IF EXISTS classificacoes_ibs_cbs;
+DROP TABLE IF EXISTS beneficios_fiscais;
+```
+
+Não há `INSERT` de semente de benefício ou classificação. Não há coluna CSOSN, IS, versão de NT,
+data comercial, fiscal ou efetiva, nem FK para `notas_fiscais`. Não derrubar `enquadramentos_fiscais`,
+`cfops`, `ncms`, `estabelecimentos` nem `empresas`.
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push).
+- Banco: só tabelas folha. Dev/CI sem dados: remover o schema e gerar a migration de remoção com
+  `drizzle-kit generate` (nunca SQL manual), na ordem `regras_tributarias`, `classificacoes_ibs_cbs`,
+  `beneficios_fiscais`. Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: a chave `fiscal.regras_perfis_autorizados`, as permissões `FISCAL_REGRAS_*` e o item de menu
+  saem só junto do revert. A chave `fiscal.enquadramentos_perfis_autorizados` fica.
+
+## E01-T04 — simulação fiscal e memória de cálculo
+
+Migration gerada por `drizzle-kit generate --name e01_t04_simulacoes_fiscais`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE "simulacoes_fiscais" ADD CONSTRAINT`.
+
+```sql
+DROP TABLE IF EXISTS simulacoes_fiscais;
+```
+
+Não há coluna de nota nem de data comercial, fiscal ou efetiva. Não derrubar `regras_tributarias`,
+`classificacoes_ibs_cbs`, `beneficios_fiscais`, `enquadramentos_fiscais`, `cfops`, `ncms`,
+`estabelecimentos` nem `empresas`.
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push).
+- Banco: só a tabela folha. Dev/CI sem dados: `DROP TABLE IF EXISTS simulacoes_fiscais;`.
+- Seed: a chave `fiscal.simulacoes_perfis_autorizados`, as permissões `FISCAL_SIMULACOES_*` e o item de menu
+  saem só junto do revert. As chaves `fiscal.regras_perfis_autorizados` e
+  `fiscal.enquadramentos_perfis_autorizados` ficam.
+
+## E01-T05 — painel de homologação de regras tributárias
+
+```sql
+DROP TABLE IF EXISTS cenarios_regressao;
+DROP TABLE IF EXISTS homologacoes_regras;
+```
+
+Não derrubar `simulacoes_fiscais`, `regras_tributarias`, `classificacoes_ibs_cbs`, `beneficios_fiscais`,
+`enquadramentos_fiscais`, `cfops`, `ncms`, `estabelecimentos` nem `empresas`. Reverter o parâmetro
+`fiscal.homologacoes_perfis_autorizados`, as três permissões e o item de menu no mesmo revert da fatia.
+Os parâmetros `fiscal.simulacoes_perfis_autorizados`, `fiscal.regras_perfis_autorizados` e
+`fiscal.enquadramentos_perfis_autorizados` ficam.

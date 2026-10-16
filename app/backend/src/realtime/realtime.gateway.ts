@@ -9,10 +9,10 @@ import { OnEvent } from '@nestjs/event-emitter';
 import type { IncomingMessage, Server } from 'http';
 import type { Duplex } from 'stream';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { TokenService } from '../modules/auth/token.service';
-import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { TokenService, type AccessTokenPayload } from '../modules/auth/token.service';
 import { PERMISSOES } from '../common/rbac/permissoes';
 import { RealtimeHub } from './realtime.hub';
+import { permissaoParaRoom, ROOMS_PROTEGIDAS } from './room-permissoes';
 import {
   EVENTOS,
   roomsDaData,
@@ -58,10 +58,15 @@ import {
   type AjusteEstoqueCriadoPayload,
   type AjusteEstoqueDecididoPayload,
   type CargaItemDivergentePayload,
+  type CadastroFiscalAlteradoPayload,
+  type EnquadramentoFiscalAlteradoPayload,
+  type RegraTributariaAlteradaPayload,
+  type SimulacaoFiscalAlteradaPayload,
+  type HomologacaoRegraAlteradaPayload,
 } from './events/eventos';
 
-/** Socket autenticado: carrega o payload do usuário validado no handshake. */
-type AuthSocket = WebSocket & { user?: CurrentUserPayload };
+/** Socket autenticado: carrega o access token validado no handshake, inclusive `exp`. */
+type AuthSocket = WebSocket & { user?: AccessTokenPayload };
 
 interface MensagemCliente {
   type: string;
@@ -125,7 +130,7 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Valida o cookie access_token do handshake; retorna o payload ou null. */
-  private autenticar(req: IncomingMessage): CurrentUserPayload | null {
+  private autenticar(req: IncomingMessage): AccessTokenPayload | null {
     try {
       const token = lerCookie(req.headers.cookie, 'access_token');
       if (!token) return null;
@@ -150,11 +155,87 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
     ws.on('error', () => this.hub.leaveAll(ws));
   }
 
+  /** A room protegida exige a permissão do mapa; as demais continuam com disponibilidade. */
   private podeAssinar(ws: AuthSocket, room: string): boolean {
     if (room === 'contabilidade-plano') {
       return ws.user?.permissoes?.includes(PERMISSOES.CONTABILIDADE_PLANO_LER) ?? false;
     }
-    return ws.user?.permissoes?.includes(PERMISSOES.DISPONIBILIDADE_LER) ?? false;
+    return ws.user?.permissoes?.includes(permissaoParaRoom(room)) ?? false;
+  }
+
+  /**
+   * Publica só em room registrada. Remove da room, antes do envio, o socket
+   * cujo access token já expirou.
+   */
+  broadcastRoom(room: string, evento: string, payload: unknown): void {
+    if (!(room in ROOMS_PROTEGIDAS)) {
+      throw new Error(`Room não registrada: ${room}`);
+    }
+    const agora = Date.now();
+    for (const socket of this.hub.membros(room)) {
+      const exp = (socket as AuthSocket).user?.exp;
+      if (exp !== undefined && exp * 1000 <= agora) this.hub.remover(socket, room);
+    }
+    this.hub.broadcast(room, evento, payload);
+  }
+
+  @OnEvent(EVENTOS.EMPRESA_FISCAL_ALTERADA)
+  handleEmpresaFiscalAlterada(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.EMPRESA_FISCAL_ALTERADA, payload);
+  }
+
+  @OnEvent(EVENTOS.ESTABELECIMENTO_FISCAL_ALTERADO)
+  handleEstabelecimentoFiscalAlterado(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.ESTABELECIMENTO_FISCAL_ALTERADO, payload);
+  }
+
+  @OnEvent(EVENTOS.REGIME_TRIBUTARIO_ALTERADO)
+  handleRegimeTributarioAlterado(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.REGIME_TRIBUTARIO_ALTERADO, payload);
+  }
+
+  private publicarFiscal(evento: string, payload: CadastroFiscalAlteradoPayload): void {
+    try {
+      this.broadcastRoom('fiscal-empresas', evento, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${evento}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.ENQUADRAMENTO_FISCAL_ALTERADO)
+  handleEnquadramentoFiscalAlterado(payload: EnquadramentoFiscalAlteradoPayload): void {
+    try {
+      this.broadcastRoom('fiscal-enquadramentos', EVENTOS.ENQUADRAMENTO_FISCAL_ALTERADO, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.ENQUADRAMENTO_FISCAL_ALTERADO}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.REGRA_TRIBUTARIA_ALTERADA)
+  handleRegraTributariaAlterada(payload: RegraTributariaAlteradaPayload): void {
+    try {
+      this.broadcastRoom('fiscal-regras', EVENTOS.REGRA_TRIBUTARIA_ALTERADA, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.REGRA_TRIBUTARIA_ALTERADA}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.SIMULACAO_FISCAL_ALTERADA)
+  handleSimulacaoFiscalAlterada(payload: SimulacaoFiscalAlteradaPayload): void {
+    try {
+      this.broadcastRoom('fiscal-simulacoes', EVENTOS.SIMULACAO_FISCAL_ALTERADA, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.SIMULACAO_FISCAL_ALTERADA}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA)
+  handleHomologacaoRegraAlterada(payload: HomologacaoRegraAlteradaPayload): void {
+    try {
+      this.broadcastRoom('fiscal-homologacoes', EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.HOMOLOGACAO_REGRA_ALTERADA}`, err as Error);
+    }
   }
 
   // ── Eventos de domínio → broadcast (defensivo) ────────────────────────────

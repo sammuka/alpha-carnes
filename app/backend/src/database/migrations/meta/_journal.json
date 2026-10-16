@@ -313,8 +313,36 @@
     {
       "idx": 44,
       "version": "7",
-      "when": 1792054442604,
-      "tag": "0048_e09_t01_plano_contas",
+      "when": 1791906266147,
+      "tag": "0044_e01_t01_empresas_estabelecimentos",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792018593751,
+      "tag": "0045_e01_t02_enquadramentos",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792041111837,
+      "tag": "0046_e01_t03_regras_tributarias",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792054042058,
+      "tag": "0047_e01_t04_simulacoes_fiscais",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792071879097,
+      "tag": "0048_e01_t05_homologacoes_regras",
       "breakpoints": true
     }
   ]

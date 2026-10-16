@@ -1,6 +1,7 @@
 import {
   ArgumentsHost,
   Catch,
+  ConflictException,
   ExceptionFilter,
   HttpException,
   HttpStatus,
@@ -8,11 +9,26 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+/** SQLSTATE de deadlock e falha de serialização: a disputa perdeu, não é erro interno. */
+const PG_CONCORRENCIA = new Set(['40P01', '40001']);
+
+function codigoPg(err: unknown): string | undefined {
+  const e = err as { code?: unknown; cause?: { code?: unknown } } | null;
+  const code = e?.code ?? e?.cause?.code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(original: unknown, host: ArgumentsHost) {
+    const exception = PG_CONCORRENCIA.has(codigoPg(original) ?? '')
+      ? new ConflictException({
+          message: 'O registro foi alterado por outro usuário. Recarregue para continuar.',
+          codigo: 'CONFLITO_CONCORRENTE',
+        })
+      : original;
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
@@ -37,9 +53,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         method: request.method,
         status,
         error:
-          exception instanceof Error
-            ? exception.message
-            : String(exception),
+          original instanceof Error
+            ? original.message
+            : String(original),
       },
       'Exceção capturada',
     );

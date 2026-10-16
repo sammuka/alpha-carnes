@@ -40,4 +40,16 @@ describe('AllExceptionsFilter (unit)', () => {
     filter.catch('falha-string', host as never);
     expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
   });
+  it.each([
+    ['40P01 direto', Object.assign(new Error('deadlock detected'), { code: '40P01' })],
+    ['40001 embrulhado pelo Drizzle', Object.assign(new Error('Failed query'), { cause: { code: '40001' } })],
+  ])('mapeia %s para 409 CONFLITO_CONCORRENTE', (_nome, erro) => {
+    const { host, status, json } = makeHost();
+    filter.catch(erro, host as never);
+    expect(status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    expect(json).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 409,
+      message: { message: 'O registro foi alterado por outro usuário. Recarregue para continuar.', codigo: 'CONFLITO_CONCORRENTE' },
+    }));
+  });
 });

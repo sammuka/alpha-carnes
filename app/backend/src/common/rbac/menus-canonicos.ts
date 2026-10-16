@@ -2,7 +2,7 @@
  * Catálogo canônico das rotas do menu (protótipo Layout.tsx → ALL_NAV_GROUPS; 39
  * rotas — AD-15 revogou as 2 entradas da AD-11).
  */
-export const MENUS_CANONICOS = [
+export const MENUS_OPERACIONAIS = [
   '/comercial/clientes',
   '/comercial/pedidos',
   '/comercial/tabela-precos',
@@ -30,7 +30,6 @@ export const MENUS_CANONICOS = [
   '/faturamento/notas-xml',
   '/faturamento/seguro-manual',
   '/faturamento/liberacao',
-  '/erp/contabilidade/plano-de-contas',
   '/cadastros/representantes',
   '/cadastros/produtos',
   '/cadastros/fornecedores',
@@ -45,6 +44,18 @@ export const MENUS_CANONICOS = [
   '/admin/auditoria',
 ] as const;
 
+/** Rotas do ERP integrado (AD-24 (1)): grupo FISCAL (posição 08) e CONTABILIDADE (posição 11) da ADR-ERP-024. */
+export const MENUS_ERP = [
+  '/fiscal/empresas',
+  '/fiscal/enquadramentos',
+  '/fiscal/regras',
+  '/fiscal/simulador',
+  '/fiscal/homologacao',
+  '/erp/contabilidade/plano-de-contas',
+] as const;
+
+export const MENUS_CANONICOS = [...MENUS_OPERACIONAIS, ...MENUS_ERP] as const;
+
 export type MenuCanonico = (typeof MENUS_CANONICOS)[number];
 
 const SET_MENUS = new Set<string>(MENUS_CANONICOS);
@@ -56,7 +67,7 @@ export function menusDesconhecidos(hrefs: string[]): string[] {
 /**
  * Menus visíveis por perfil — transcrição da coluna "Perfis RBAC" da matriz de
  * rastreabilidade v1.1 (linhas 3–41), invertida de rota→perfis para perfil→rotas.
- * Total: 126 pares da matriz v1.1 + 1. Alterar aqui exige alterar a matriz (decisão 7).
+ * Total: 126 pares da matriz v1.1 + 6 rotas ERP no administrador (5 fiscais e o plano de contas). Alterar aqui exige alterar a matriz (decisão 7).
  */
 export const MENUS_VISIVEIS_POR_PERFIL: Record<string, string[]> = {
   administrador: [...MENUS_CANONICOS],

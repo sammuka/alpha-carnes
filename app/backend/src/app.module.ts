@@ -31,23 +31,41 @@ import { DashboardModule } from './modules/gestao/dashboard/dashboard.module';
 import { AprovacoesModule } from './modules/gestao/aprovacoes/aprovacoes.module';
 import { SifModule } from './modules/gestao/sif/sif.module';
 import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
+import { EmpresasFiscaisModule } from './modules/erp/fiscal/empresas/empresas-fiscais.module';
+import { EnquadramentosFiscaisModule } from './modules/erp/fiscal/enquadramentos/enquadramentos-fiscais.module';
+import { RegrasTributariasModule } from './modules/erp/fiscal/regras/regras-tributarias.module';
+import { SimulacoesFiscaisModule } from './modules/erp/fiscal/simulacoes/simulacoes-fiscais.module';
+import { HomologacoesRegrasModule } from './modules/erp/fiscal/homologacoes/homologacoes-regras.module';
 import { PlanoContasModule } from './modules/contabilidade/plano/plano.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import type { IncomingMessage } from 'http';
+import type { Writable } from 'stream';
+import { logRedact, logTestSink } from './common/logging/redact';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ load: [appConfig], isGlobal: true }),
     EventEmitterModule.forRoot(),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        level: process.env.LOG_LEVEL ?? 'info',
-        transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
-        genReqId: (req: IncomingMessage) =>
-          (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
-        customProps: () => ({ context: 'HTTP' }),
+    LoggerModule.forRootAsync({
+      useFactory: () => {
+        const opts = {
+          level: process.env.LOG_LEVEL ?? 'info',
+          redact: logRedact,
+          genReqId: (req: IncomingMessage) =>
+            (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
+          customProps: () => ({ context: 'HTTP' }),
+        };
+        if (logTestSink.stream) {
+          return { pinoHttp: [opts, logTestSink.stream] as [typeof opts, Writable] };
+        }
+        return {
+          pinoHttp: {
+            ...opts,
+            transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
+          },
+        };
       },
     }),
     ThrottlerModule.forRootAsync({
@@ -86,6 +104,11 @@ import type { IncomingMessage } from 'http';
     AprovacoesModule,
     SifModule,
     AuditoriaConsultaModule,
+    EmpresasFiscaisModule,
+    EnquadramentosFiscaisModule,
+    RegrasTributariasModule,
+    SimulacoesFiscaisModule,
+    HomologacoesRegrasModule,
     PlanoContasModule,
   ],
   controllers: [HealthController],

@@ -107,6 +107,11 @@ export class OperacoesService {
     if (query.extraordinaria !== undefined) {
       filtros.push(eq(operacoes.extraordinaria, query.extraordinaria));
     }
+    const termo = query.search?.replace(/[%_]/g, '');
+    if (termo) {
+      const like = `%${termo}%`;
+      filtros.push(sql`(${operacoes.rotulo} ILIKE ${like} OR ${operacoes.data}::text ILIKE ${like} OR to_char(${operacoes.data}, 'DD/MM/YYYY') ILIKE ${like})`);
+    }
     const where = and(...filtros);
     const limit = query.limite;
     const offset = (query.pagina - 1) * query.limite;

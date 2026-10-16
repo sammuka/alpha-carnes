@@ -21,6 +21,7 @@ const ROTA_PLANO = '/erp/contabilidade/plano-de-contas';
 /**
  * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a rota.
  * É a fonte contra a qual `menus_visiveis` é conferido: são as mesmas 126 atribuições.
+ * O item do ERP (AD-24 (1)) fica em `MATRIZ_ERP`, para não alterar esta transcrição.
  */
 const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/comercial/clientes': ['comercial', 'gestor', 'administrador', 'faturamento'],
@@ -62,8 +63,20 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/admin/perfis': ['administrador'],
   '/admin/parametros': ['administrador'],
   '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
+};
+
+/** Rotas do ERP integrado: fiscais (AD-24, H-E01-12) e plano de contas (E09-T01), só no administrador. */
+const MATRIZ_ERP: Record<string, string[]> = {
+  '/fiscal/empresas': ['administrador'],
+  '/fiscal/enquadramentos': ['administrador'],
+  '/fiscal/regras': ['administrador'],
+  '/fiscal/simulador': ['administrador'],
+  '/fiscal/homologacao': ['administrador'],
   [ROTA_PLANO]: ['administrador'],
 };
+
+/** Matriz v1.1 (39 rotas, 126 atribuições) + ERP (6 rotas, 6 atribuições) = 45 rotas, 132. */
+const MATRIZ_COMPLETA: Record<string, string[]> = { ...MATRIZ_RASTREABILIDADE, ...MATRIZ_ERP };
 
 /** Decisão 25 da Onda 2 — as 26 rotas que o gate de grupo retirava do menu. Devem estar visíveis. */
 const PERDAS_HERDADAS: Record<string, string[]> = {
@@ -97,14 +110,11 @@ const EXTRAS_HERDADOS: Record<string, string[]> = {
  */
 const TODOS = [
   'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
-  'CARGA', 'FATURAMENTO', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  'CARGA', 'FATURAMENTO', 'FISCAL', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 const GRUPOS_ESPERADOS: Record<string, string[]> = {
   administrador: TODOS,
-  gestor: [
-    'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
-    'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
-  ],
+  gestor: TODOS.filter((titulo) => titulo !== 'FISCAL' && titulo !== 'CONTABILIDADE'),
   compras: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'CADASTROS & REGRAS'],
   comercial: ['COMERCIAL', 'GESTÃO', 'DESOSSA'],
   recebimento_pesagem: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'ESTOQUE'],
@@ -152,16 +162,25 @@ function esperadoDe(tabela: Record<string, string[]>, perfil: string): string[] 
 
 /** Matriz invertida: rota→perfis vira perfil→rotas. */
 function menusDaMatriz(perfil: string): string[] {
-  return Object.entries(MATRIZ_RASTREABILIDADE)
+  return Object.entries(MATRIZ_COMPLETA)
     .filter(([, perfis]) => perfis.includes(perfil))
     .map(([href]) => href)
     .sort();
 }
 
+function permissoesDe(perfil: string): string[] {
+  const permissoes = PERMISSOES_POR_PERFIL[perfil];
+  if (!permissoes) throw new Error(`perfil ausente no snapshot de permissoes: ${perfil}`);
+  return permissoes;
+}
+
+/** Grupos do menu do perfil, com as permissões reais do snapshot (como o layout faz). */
+function gruposVisiveis(perfil: string) {
+  return filtrarMenuPorMenusVisiveis(menusDe(perfil), permissoesDe(perfil));
+}
+
 function rotasVisiveis(perfil: string): string[] {
-  return filtrarMenuPorMenusVisiveis(menusDe(perfil)).flatMap((grupo) =>
-    grupo.items.map((item) => item.href),
-  );
+  return gruposVisiveis(perfil).flatMap((grupo) => grupo.items.map((item) => item.href));
 }
 
 describe('menu por menus_visiveis — reconciliação com a matriz', () => {
@@ -170,24 +189,25 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre as 39 rotas operacionais e a rota nova', () => {
-    const chaves = Object.keys(MATRIZ_RASTREABILIDADE);
-    expect(chaves.filter((href) => href !== ROTA_PLANO).sort()).toEqual(
-      [...ROTAS_CANONICAS].filter((href) => href !== ROTA_PLANO).sort(),
-    );
-    expect(chaves.filter((href) => href !== ROTA_PLANO)).toHaveLength(39);
-    expect([...ROTAS_CANONICAS].sort()).toEqual(chaves.sort());
-    expect(ROTAS_CANONICAS).toHaveLength(40);
+  it('a matriz transcrita cobre exatamente as 39 rotas da v1.1 e o menu soma as rotas do ERP (AD-15, AD-24)', () => {
+    const semFiscal = ROTAS_CANONICAS.filter((href) => !href.startsWith('/fiscal/') && !href.startsWith('/erp/'));
+    expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...semFiscal].sort());
+    expect(semFiscal).toHaveLength(39);
+    expect(Object.keys(MATRIZ_COMPLETA).sort()).toEqual([...ROTAS_CANONICAS].sort());
+    expect(ROTAS_CANONICAS).toHaveLength(45);
+    expect(ROTAS_CANONICAS).toContain(ROTA_PLANO);
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 127 atribuicoes perfil x rota', () => {
+  it('a matriz soma 126 atribuicoes da v1.1 + 6 do ERP = 132 (AD-15 revogou 2 rotas da AD-11)', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(127);
-    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(127);
+    expect(total).toBe(132);
+    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(126);
+    expect(Object.values(MATRIZ_ERP).reduce((s, p) => s + p.length, 0)).toBe(6);
+    expect(Object.values(MATRIZ_COMPLETA).reduce((s, p) => s + p.length, 0)).toBe(132);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -201,7 +221,7 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
   it('zero extras: nenhum item visivel sem atribuicao na matriz', () => {
     const extras = PERFIS.flatMap((perfil) =>
       rotasVisiveis(perfil)
-        .filter((href) => !(MATRIZ_RASTREABILIDADE[href] ?? []).includes(perfil))
+        .filter((href) => !(MATRIZ_COMPLETA[href] ?? []).includes(perfil))
         .map((href) => `${perfil}:${href}`),
     );
     expect(extras).toEqual([]);
@@ -233,7 +253,49 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     const esperado = esperadoDe(GRUPOS_ESPERADOS, perfil);
     // A tabela do plano precisa estar na ordem canônica; senão o toEqual abaixo vira loteria.
     expect(esperado).toEqual(TODOS.filter((titulo) => esperado.includes(titulo)));
-    expect(filtrarMenuPorMenusVisiveis(menusDe(perfil)).map((g) => g.title)).toEqual(esperado);
+    expect(gruposVisiveis(perfil).map((g) => g.title)).toEqual(esperado);
+  });
+
+  it('item com permissao some sem a permissao (fail-closed)', () => {
+    const menusAdmin = menusDe('administrador');
+    const semEmpresas = permissoesDe('administrador').filter((p) => p !== 'FISCAL_EMPRESAS_LER');
+    const hrefsSemEmpresas = filtrarMenuPorMenusVisiveis(menusAdmin, semEmpresas)
+      .flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefsSemEmpresas).not.toContain('/fiscal/empresas');
+    expect(hrefsSemEmpresas).toContain('/fiscal/enquadramentos');
+    const semFiscal = permissoesDe('administrador').filter(
+      (p) => p !== 'FISCAL_EMPRESAS_LER' && p !== 'FISCAL_ENQUADRAMENTOS_LER' && p !== 'FISCAL_REGRAS_LER' && p !== 'FISCAL_SIMULACOES_LER' && p !== 'FISCAL_HOMOLOGACOES_LER',
+    );
+    const grupos = filtrarMenuPorMenusVisiveis(menusAdmin, semFiscal).map((g) => g.title);
+    expect(grupos).not.toContain('FISCAL');
+    expect(grupos).toEqual(TODOS.filter((titulo) => titulo !== 'FISCAL'));
+    expect(filtrarMenuPorMenusVisiveis(menusAdmin).map((g) => g.title)).not.toContain('FISCAL');
+  });
+
+  it('administrador ve FISCAL; nenhum outro perfil ve', () => {
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/empresas');
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/enquadramentos');
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/regras');
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/simulador');
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/homologacao');
+    expect(gruposVisiveis('administrador').map((g) => g.title)).toContain('FISCAL');
+    for (const perfil of PERFIS.filter((p) => p !== 'administrador')) {
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/empresas');
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/enquadramentos');
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/regras');
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/simulador');
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/homologacao');
+    }
+  });
+
+  it('menu FISCAL atribuido a perfil sem FISCAL_EMPRESAS_LER nao aparece', () => {
+    // Perfil criado em /admin/perfis com o menu marcado, mas sem a permissão de leitura fiscal.
+    const grupos = filtrarMenuPorMenusVisiveis(
+      [...menusDe('gestor'), '/fiscal/empresas'],
+      permissoesDe('gestor'),
+    );
+    expect(permissoesDe('gestor')).not.toContain('FISCAL_EMPRESAS_LER');
+    expect(grupos.map((g) => g.title)).not.toContain('FISCAL');
   });
 
   it.each(PERFIS)('rota de entrada bate com a funcao primaria do perfil: %s', (perfil) => {
@@ -273,12 +335,12 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
   });
 
   it('gestor ve ADMINISTRAÇÃO apenas com Auditoria', () => {
-    const admin = filtrarMenuPorMenusVisiveis(menusDe('gestor')).find((g) => g.title === 'ADMINISTRAÇÃO');
+    const admin = gruposVisiveis('gestor').find((g) => g.title === 'ADMINISTRAÇÃO');
     expect(admin?.items.map((i) => i.href)).toEqual(['/admin/auditoria']);
   });
 
   it('todo grupo do MENU_V2 aparece para ao menos um perfil', () => {
-    const titulos = new Set(PERFIS.flatMap((p) => filtrarMenuPorMenusVisiveis(menusDe(p)).map((g) => g.title)));
+    const titulos = new Set(PERFIS.flatMap((p) => gruposVisiveis(p).map((g) => g.title)));
     expect([...titulos].sort()).toEqual(MENU_V2.map((g) => g.title).sort());
   });
 
@@ -287,8 +349,8 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(40);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(127);
+    expect(ROTAS_CANONICAS).toHaveLength(45);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(132);
 
     const chavesPlano = ['CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR'];
     expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPlano));
