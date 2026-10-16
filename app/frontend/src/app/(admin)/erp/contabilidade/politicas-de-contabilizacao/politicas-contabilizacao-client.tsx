@@ -183,6 +183,7 @@ export function PoliticasContabilizacaoClient({
   const [ordenar, setOrdenar] = useState<string>('competencia');
   const [direcao, setDirecao] = useState<'asc' | 'desc'>('asc');
   const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(totalInicial);
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
@@ -214,18 +215,20 @@ export function PoliticasContabilizacaoClient({
   }).toString());
   const sequenciaLista = useRef(0);
 
-  useEffect(() => {
-    const consulta = new URLSearchParams({
+  function consultaAtual() {
+    return new URLSearchParams({
       pagina: String(pagina), q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao,
     }).toString();
-    // Compara com a última consulta feita (inicialmente, a da lista que o servidor entregou): não consulta ao montar
-    // nem na segunda montagem simulada do StrictMode, e consulta uma vez só depois da restauração do sessionStorage.
-    if (consulta === ultimaConsulta.current) return;
+  }
+
+  async function consultar(consulta: string, paginaDaConsulta: number) {
     ultimaConsulta.current = consulta;
     sequenciaLista.current += 1;
     const minha = sequenciaLista.current;
-    void (async () => {
-      try {
+    setCarregando(true);
+    try {
+      // Uma segunda tentativa cobre página vazia com total > 0 (lista lida antes de uma gravação, total depois).
+      for (let tentativa = 0; tentativa < 2; tentativa += 1) {
         const resposta = await fetch(`/api/contabilidade/politicas?${consulta}`);
         if (minha !== sequenciaLista.current) return;
         if (!resposta.ok) {
@@ -239,16 +242,28 @@ export function PoliticasContabilizacaoClient({
           return;
         }
         const novoTotal = typeof corpo.total === 'number' ? corpo.total : corpo.itens.length;
+        const ultima = Math.max(1, Math.ceil(novoTotal / POR_PAGINA));
+        if (corpo.itens.length === 0 && novoTotal > 0 && paginaDaConsulta <= ultima && tentativa === 0) continue;
         setLinhas(corpo.itens);
         setTotal(novoTotal);
         setMarcadas([]);
         setAviso('');
-        const ultima = Math.max(1, Math.ceil(novoTotal / POR_PAGINA));
-        if (pagina > ultima) setPagina(ultima);
-      } catch {
-        if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
+        if (paginaDaConsulta > ultima) setPagina(ultima);
+        return;
       }
-    })();
+    } catch {
+      if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
+    } finally {
+      if (minha === sequenciaLista.current) setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    const consulta = consultaAtual();
+    // Compara com a última consulta feita (inicialmente, a da lista que o servidor entregou): não consulta ao montar
+    // nem na segunda montagem simulada do StrictMode, e consulta uma vez só depois da restauração do sessionStorage.
+    if (consulta === ultimaConsulta.current) return;
+    void consultar(consulta, pagina);
   }, [busca, filtroCompetencia, filtroSituacao, ordenar, direcao, pagina]);
   // ponytail: uma requisição por tecla, sem debounce; a guarda de sequência descarta resposta antiga. Adicionar debounce de 250 ms se o servidor sentir.
 
@@ -431,12 +446,16 @@ export function PoliticasContabilizacaoClient({
       setAviso(await lerMensagem(resposta));
       return;
     }
-    const gravada = await resposta.json() as PoliticaApresentada;
-    setLinhas((lista) => [gravada, ...lista.filter((linha) => linha.codigo !== gravada.codigo)]);
+    const gravada = await lerCorpo(resposta);
+    if (!ehPolitica(gravada)) {
+      setAviso(NAO_CONFIRMADO);
+      return;
+    }
     setCodigoSelecionado(gravada.codigo);
     setSalvo(JSON.stringify(form));
     setDrawer(null);
     setAviso('');
+    await consultar(consultaAtual(), pagina);
   }
 
   async function exportar() {
@@ -529,7 +548,8 @@ export function PoliticasContabilizacaoClient({
         <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
       </div>
       {aviso ? <p role="status">{aviso}</p> : null}
-      <div className="politicas-grade">
+      {carregando ? <p role="status" aria-busy="true" className="text-sm text-muted-foreground">Carregando…</p> : null}
+      <div className="politicas-grade" aria-busy={carregando}>
         <table>
           <thead>
             <tr>
@@ -544,7 +564,7 @@ export function PoliticasContabilizacaoClient({
             </tr>
           </thead>
           <tbody>
-            {linhas.length === 0 ? (
+            {linhas.length === 0 && carregando ? null : linhas.length === 0 ? (
               <tr>
                 <td colSpan={7}>Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.</td>
               </tr>

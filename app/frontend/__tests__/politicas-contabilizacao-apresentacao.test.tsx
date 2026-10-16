@@ -554,3 +554,53 @@ describe('exportação', () => {
     expect(screen.queryByText(/exportad/i)).not.toBeInTheDocument();
   });
 });
+
+describe('lista consistente com o servidor', () => {
+  it('depois de gravar, recarrega a lista do servidor com os filtros atuais e atualiza o total', async () => {
+    const user = userEvent.setup();
+    const gravada = linha('TARIFA-2026-11', 'Tarifa');
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ contas: [{ codigo: '1.1.01', nome: 'Caixa' }], centros: [] }) })
+      .mockResolvedValueOnce(corpoOk(gravada))
+      .mockResolvedValueOnce(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 21 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} totalInicial={20} />);
+    expect(screen.getByText(/Página 1 de 1/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Configurar mappings' }));
+    await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
+    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' })[1]!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/contabilidade/politicas?pagina=1&q=&competencia=&situacao=&ordenar=competencia&direcao=asc',
+    );
+    expect(await screen.findByText(/Página 1 de 2/)).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Tarifa' })).not.toBeInTheDocument();
+  });
+
+  it('mostra o indicador de carregamento acessível enquanto consulta e o remove ao terminar', async () => {
+    const user = userEvent.setup();
+    const consulta = adiavel();
+    global.fetch = jest.fn().mockReturnValue(consulta.promessa) as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    expect(screen.queryByText('Carregando…')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+    const indicador = await screen.findByText('Carregando…');
+    expect(indicador).toHaveAttribute('role', 'status');
+    expect(indicador).toHaveAttribute('aria-busy', 'true');
+    await act(async () => { consulta.resolver(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 })); });
+    expect(screen.queryByText('Carregando…')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  });
+
+  it('itens vazio com total maior que zero na página atual refaz a consulta', async () => {
+    const user = userEvent.setup();
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(corpoOk({ itens: [], total: 1 }))
+      .mockResolvedValueOnce(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[]} />);
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+    expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
