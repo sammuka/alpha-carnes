@@ -577,6 +577,32 @@ describe('lista consistente com o servidor', () => {
     expect(screen.queryByRole('cell', { name: 'Tarifa' })).not.toBeInTheDocument();
   });
 
+  it('busca alterada durante o POST de gravar recarrega com a consulta nova, não com a do clique', async () => {
+    const user = userEvent.setup();
+    const post = adiavel();
+    const fetchMock = jest.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') return post.promessa;
+      if (url === '/api/contabilidade/politicas/opcoes') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ contas: [{ codigo: '1.1.01', nome: 'Caixa' }], centros: [] }) });
+      }
+      return Promise.resolve(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 }));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getByRole('button', { name: 'Configurar mappings' }));
+    await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
+    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' })[1]!);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true));
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'z');
+    const consultaNova = '/api/contabilidade/politicas?pagina=1&q=z&competencia=&situacao=&ordenar=competencia&direcao=asc';
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(consultaNova));
+    const chamadasAntes = fetchMock.mock.calls.length;
+    await act(async () => { post.resolver(corpoOk(linha('TARIFA-2026-11', 'Tarifa'))); });
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(chamadasAntes));
+    const listas = fetchMock.mock.calls.slice(chamadasAntes).map(([url]) => url);
+    expect(listas).toEqual([consultaNova]);
+  });
+
   it('mostra o indicador de carregamento acessível enquanto consulta e o remove ao terminar', async () => {
     const user = userEvent.setup();
     const consulta = adiavel();

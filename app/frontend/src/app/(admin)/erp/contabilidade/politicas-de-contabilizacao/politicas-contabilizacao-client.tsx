@@ -455,7 +455,9 @@ export function PoliticasContabilizacaoClient({
     setSalvo(JSON.stringify(form));
     setDrawer(null);
     setAviso('');
-    await consultar(consultaAtual(), pagina);
+    // A consulta vigente está no ref (o efeito dos filtros o atualiza): filtro trocado durante o POST não volta ao do clique.
+    const vigente = ultimaConsulta.current;
+    await consultar(vigente, Number(new URLSearchParams(vigente).get('pagina')) || 1);
   }
 
   async function exportar() {
