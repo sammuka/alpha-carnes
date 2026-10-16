@@ -637,20 +637,21 @@ export class EnquadramentosService {
   }
 
   /**
-   * D9 (T03): regra em RASCUNHO, SUBMETIDA ou APROVADA lê CFOP e operação por este enquadramento. Mudar a chave,
-   * inativar ou remover deixaria a regra imutável alterada ou órfã. O enquadramento já está travado
-   * (FOR NO KEY UPDATE); as regras, em FOR SHARE, serializam com submeter/aprovar concorrentes.
+   * D9 (T03) + AD-33: regra SUBMETIDA ou APROVADA lê CFOP e operação por este enquadramento. Mudar a chave,
+   * inativar ou remover deixaria a regra imutável alterada ou órfã. Rascunho não bloqueia: submeter e aprovar
+   * exigem enquadramento ativo (422 ENQUADRAMENTO_INDISPONIVEL). Ordem única de locks: o enquadramento já está
+   * travado (FOR NO KEY UPDATE) e só então as regras, em FOR SHARE — a mesma ordem das ações de regra.
    */
   private async exigirSemRegraVigente(tx: Tx, enquadramentoId: string) {
     const [regra] = await tx.select({ codigo: regrasTributarias.codigo }).from(regrasTributarias).where(and(
       eq(regrasTributarias.enquadramentoId, enquadramentoId),
       isNull(regrasTributarias.deletedAt),
-      inArray(regrasTributarias.situacao, ['RASCUNHO', 'SUBMETIDA', 'APROVADA']),
+      inArray(regrasTributarias.situacao, ['SUBMETIDA', 'APROVADA']),
     )).limit(1).for('share');
     if (regra) {
       conflito(
         'ENQUADRAMENTO_COM_REGRA_ATIVA',
-        'Há regra tributária em rascunho, submetida ou aprovada neste enquadramento. Aposente ou remova a regra antes de alterar a chave, inativar ou remover o enquadramento.',
+        'Há regra submetida ou aprovada vinculada a este enquadramento. Aposente a regra aprovada (ou conclua a aprovação e aposente) antes de alterar.',
         { regraCodigo: regra.codigo },
       );
     }

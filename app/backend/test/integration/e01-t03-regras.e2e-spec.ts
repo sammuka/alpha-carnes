@@ -619,18 +619,16 @@ describe('E01-T03 regras tributárias', () => {
       expect(liberado.status).toBe(200);
     });
 
-    it.each(['RASCUNHO', 'SUBMETIDA', 'APROVADA'])(
-      'B6: regra %s bloqueia troca de chave, inativar e remover o enquadramento (fail-closed)',
+    it.each(['SUBMETIDA', 'APROVADA'])(
+      'B6 (AD-33): regra %s bloqueia troca de chave, inativar e remover o enquadramento',
       async (situacao) => {
         const base = await cenario();
         const criada = await criarComo(adminA, ids(base));
         expect(criada.res.status).toBe(201);
         let versaoRegra = criada.res.body.versao as number;
-        if (situacao !== 'RASCUNHO') {
-          const sub = await submeterComo(adminA, criada.res.body.id, versaoRegra);
-          expect(sub.status).toBe(200);
-          versaoRegra = sub.body.versao;
-        }
+        const sub = await submeterComo(adminA, criada.res.body.id, versaoRegra);
+        expect(sub.status).toBe(200);
+        versaoRegra = sub.body.versao;
         if (situacao === 'APROVADA') {
           const apr = await aprovarComo(adminB, criada.res.body.id, versaoRegra);
           expect(apr.status).toBe(200);
@@ -656,15 +654,36 @@ describe('E01-T03 regras tributárias', () => {
       },
     );
 
-    it('B6: regra APOSENTADA libera o enquadramento', async () => {
+    it.each(['RASCUNHO', 'APOSENTADA'])('B6 (AD-33): regra %s não bloqueia inativar o enquadramento', async (situacao) => {
       const base = await cenario();
-      const fluxo = await aprovarFluxo(ids(base));
-      const aposentada = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/aposentar`).set('Cookie', adminB)
-        .send({ versao: fluxo.aprovada.versao, justificativa: MOTIVO });
-      expect(aposentada.status).toBe(200);
+      if (situacao === 'RASCUNHO') {
+        expect((await criarComo(adminA, ids(base))).res.status).toBe(201);
+      } else {
+        const fluxo = await aprovarFluxo(ids(base));
+        const aposentada = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/aposentar`).set('Cookie', adminB)
+          .send({ versao: fluxo.aprovada.versao, justificativa: MOTIVO });
+        expect(aposentada.status).toBe(200);
+      }
       const liberado = await request(app.getHttpServer()).post(`/fiscal/enquadramentos/${base.enquadramentoId}/inativar`)
         .set('Cookie', adminA).send({ versao: base.versaoEnquadramento, justificativa: MOTIVO });
       expect(liberado.status).toBe(200);
+    });
+
+    it.each(['inativar', 'remover'])('AD-33: rascunho sob enquadramento após %s não submete (422)', async (acao) => {
+      const base = await cenario();
+      const criada = await criarComo(adminA, ids(base));
+      expect(criada.res.status).toBe(201);
+      const url = `/fiscal/enquadramentos/${base.enquadramentoId}`;
+      const alterado = acao === 'inativar'
+        ? await request(app.getHttpServer()).post(`${url}/inativar`).set('Cookie', adminA)
+          .send({ versao: base.versaoEnquadramento, justificativa: MOTIVO })
+        : await request(app.getHttpServer()).delete(url).set('Cookie', adminA).send({ justificativa: MOTIVO });
+      expect(alterado.status).toBe(200);
+      const sub = await submeterComo(adminA, criada.res.body.id, criada.res.body.versao);
+      expect(sub.status).toBe(422);
+      expect(codigoDe(sub.body)).toBe('ENQUADRAMENTO_INDISPONIVEL');
+      const regra = await db().execute(sql`SELECT situacao FROM regras_tributarias WHERE id = ${criada.res.body.id}`);
+      expect(regra.rows[0]).toMatchObject({ situacao: 'RASCUNHO' });
     });
 
     it('B7: rascunho de versão 2 não troca de enquadramento; rascunho da v1 troca', async () => {
