@@ -34,3 +34,20 @@ describe('fiscal-simulacoes lib', () => {
       .toBe('71 · versão 2 · Calculada · Outubro de 2026');
   });
 });
+
+describe('ENQUADRAMENTO_INDISPONIVEL (plano T04 L501)', () => {
+  it.each([
+    'O enquadramento fiscal não está ativo.',
+    'O enquadramento fiscal não cobre esta competência.',
+  ])('mostra a mensagem do servidor: %s', async (mensagem) => {
+    const original = global.fetch;
+    global.fetch = jest.fn(async () => new Response(JSON.stringify({ message: { message: mensagem, codigo: 'ENQUADRAMENTO_INDISPONIVEL' }, statusCode: 422 }), { status: 422 })) as unknown as typeof fetch;
+    try {
+      const erro = await lib.simulacoesApi.criar({} as never).catch((e: unknown) => e);
+      expect(erro).toBeInstanceOf(lib.ErroSimulacao);
+      expect(lib.mensagemDeSimulacao(erro as InstanceType<typeof lib.ErroSimulacao>)).toBe(mensagem);
+    } finally {
+      global.fetch = original;
+    }
+  });
+});

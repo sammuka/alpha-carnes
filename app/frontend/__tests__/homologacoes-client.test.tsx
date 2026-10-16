@@ -968,3 +968,12 @@ describe('padrões do Portão A r4', () => {
     expect(chamadas.filter((c) => c.url.pathname.endsWith('/cenarios'))).toHaveLength(1);
   });
 });
+
+describe('Portão A r1 do PR #166 — responsável pela aprovação (D4)', () => {
+  it('homologação Rejeitada sem aprovador não mostra "Pendente" na ficha', async () => {
+    detalhe = { ...detalhe, situacao: 'Rejeitada', aprovador: '' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    expect(valorDe('Responsável pela aprovação')!.textContent).toBe('');
+  });
+});

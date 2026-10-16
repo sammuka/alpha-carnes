@@ -10,6 +10,7 @@ import {
   TEXTO_EXCECAO,
   TEXTO_EXCECAO_CORPO,
   TEXTO_PENDENTE,
+  rotuloAprovador,
   TEXTO_REGRAS,
   type DetalheHomologacao,
   type EventoHistorico,
@@ -100,7 +101,7 @@ export function AbasDetalhe({
           <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-3">
             <Campo label="Empresa">{detalhe.empresa}</Campo>
             <Campo label="Responsável">{detalhe.responsavel || TEXTO_PENDENTE}</Campo>
-            <Campo label="Responsável pela aprovação">{detalhe.aprovador || TEXTO_PENDENTE}</Campo>
+            <Campo label="Responsável pela aprovação">{rotuloAprovador(detalhe)}</Campo>
             <Campo label="Criado em">{rotuloDataHora(detalhe.criadoEm)}</Campo>
             <Campo label="Alterado em">{rotuloDataHora(detalhe.atualizadoEm)}</Campo>
           </div>

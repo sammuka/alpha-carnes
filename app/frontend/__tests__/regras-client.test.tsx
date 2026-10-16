@@ -1000,3 +1000,29 @@ describe('padrões do Portão A r4', () => {
     expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar'))).toHaveLength(1);
   });
 });
+
+describe('Portão A r1 do PR #166 — tratamento ICMS (AD-34)', () => {
+  it('diferimento oferecido no drawer leva o selo Provisório e o aviso de aprovação pendente', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<RegraDrawer aberto detalhe={null} onFechar={() => undefined} onSalvar={async () => null} onNovoCodigo={() => undefined} />);
+    expect(screen.queryByText(/diferimento do ICMS está pendente/)).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Tratamento ICMS'), '51');
+    const aviso = screen.getByText(/diferimento do ICMS está pendente/);
+    expect(aviso.closest('p')).toHaveTextContent('Provisório');
+  });
+
+  it('tratamento ICMS incoerente: a mensagem do servidor aparece no drawer e na aprovação', async () => {
+    const { user } = renderizar();
+    detalhe = { ...detalhe, situacao: 'Rascunho' };
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    const drawer = await screen.findByRole('dialog');
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Ajuste da alíquota');
+    proximaMutacao = envelope(422, {
+      message: 'Isenção não calcula ICMS. Informe redução de base e alíquota 0,00.',
+      codigo: 'TRATAMENTO_ICMS_INCOERENTE',
+    });
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(drawer).findByText('Isenção não calcula ICMS. Informe redução de base e alíquota 0,00.')).toBeInTheDocument();
+  });
+});

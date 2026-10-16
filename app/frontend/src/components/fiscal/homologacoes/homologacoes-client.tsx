@@ -15,7 +15,7 @@ import {
   CHAVE_LISTA,
   FILTROS_LISTA,
   SITUACOES,
-  TEXTO_PENDENTE,
+  rotuloAprovador,
   TEXTO_VAZIO,
   ErroAcaoHomologacao,
   ErroHomologacao,
@@ -42,7 +42,7 @@ const COLUNAS: ColunaGrade<LinhaHomologacao>[] = [
   { id: 'vigenciaInicio', rotulo: 'Início de vigência', celula: (l) => rotuloData(l.vigenciaInicio) },
   { id: 'situacao', rotulo: 'Situação', celula: (l) => l.situacao, ordenavel: false },
   { id: 'usuario', rotulo: 'Usuário', celula: (l) => l.usuario },
-  { id: 'aprovador', rotulo: 'Responsável pela aprovação', celula: (l) => l.aprovador || TEXTO_PENDENTE },
+  { id: 'aprovador', rotulo: 'Responsável pela aprovação', celula: (l) => rotuloAprovador(l) },
   { id: 'descricao', rotulo: 'Descrição', celula: (l) => l.descricao },
 ];
 

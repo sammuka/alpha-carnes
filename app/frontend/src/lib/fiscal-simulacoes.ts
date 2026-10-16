@@ -85,7 +85,6 @@ const MENSAGENS: Record<string, string> = {
   DESCONTO_MAIOR_QUE_VALOR: 'O desconto não pode ser maior que o valor.',
   VERSAO_IMUTAVEL: 'A memória calculada não pode ser alterada. Inclua uma versão nova.',
   ENQUADRAMENTO_DIVERGENTE: 'Estabelecimento, operação, cliente, produto e classificação fiscal (NCM) precisam ser os do enquadramento selecionado.',
-  ENQUADRAMENTO_INDISPONIVEL: 'O enquadramento fiscal não cobre esta competência.',
   LINHAGEM_ENQUADRAMENTO_FIXO: 'A versão nova permanece no mesmo enquadramento fiscal.',
   SIMULACOES_DISTINTAS: 'A comparação exige duas versões da mesma simulação.',
   CONFLITO_CONCORRENTE: 'O registro foi alterado por outro usuário. Recarregue para continuar.',

@@ -13,6 +13,12 @@ export const TEXTO_EXCECAO_CORPO = 'Esta tela não bloqueia a publicação por a
 /** Responsável pela aprovação ainda não definido. */
 export const TEXTO_PENDENTE = 'Pendente';
 
+/** D4: "Pendente" só enquanto a homologação está Em revisão; Rejeitada ou Publicada sem aprovador fica vazio. */
+export function rotuloAprovador(linha: { situacao: string; aprovador: string }): string {
+  if (linha.aprovador) return linha.aprovador;
+  return linha.situacao === 'Em revisão' ? TEXTO_PENDENTE : '';
+}
+
 export const SITUACOES = [
   ['EM_REVISAO', 'Em revisão'],
   ['APROVADA', 'Aprovada'],

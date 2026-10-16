@@ -12,3 +12,12 @@ describe('fiscal-homologacoes lib', () => {
     expect(fonte).not.toMatch(/Number\(/);
   });
 });
+
+describe('responsável pela aprovação (D4)', () => {
+  it('"Pendente" só em Em revisão; Rejeitada e Publicada sem aprovador ficam vazias', () => {
+    expect(lib.rotuloAprovador({ situacao: 'Em revisão', aprovador: '' })).toBe('Pendente');
+    expect(lib.rotuloAprovador({ situacao: 'Rejeitada', aprovador: '' })).toBe('');
+    expect(lib.rotuloAprovador({ situacao: 'Publicada', aprovador: '' })).toBe('');
+    expect(lib.rotuloAprovador({ situacao: 'Aprovada', aprovador: 'Carlos Lima' })).toBe('Carlos Lima');
+  });
+});
