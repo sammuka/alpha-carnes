@@ -769,7 +769,7 @@ describe('justificativa com caracteres invisíveis', () => {
     fireEvent.change(within(dialogo).getByLabelText('Justificativa auditável'), { target: { value: ' a' + INVISIVEIS + 'bc ' } });
     await user.click(within(dialogo).getByRole('button', { name: 'Aprovar' }));
     await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/aprovar'))).toBe(true));
-    expect(chamadas.find((c) => c.url.pathname.endsWith('/aprovar'))?.corpo?.justificativa).toBe('abc');
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/aprovar'))?.corpo?.justificativa).toBe('a' + INVISIVEIS + 'bc');
   });
 
   it('no vínculo de cenário e no drawer, os invisíveis também não contam', async () => {

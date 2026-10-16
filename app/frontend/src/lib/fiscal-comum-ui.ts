@@ -25,10 +25,8 @@ export interface FalhaSalvar {
 /** Texto que vale para o mínimo de caracteres e que se envia: o normalizador único de `./justificativa`. */
 export const textoUtil = normalizarJustificativa;
 
-/** A justificativa (ou o motivo) tem texto suficiente depois de normalizada: mínimo de 3 caracteres. */
-export function justificativaValida(texto: string): boolean {
-  return textoUtil(texto).length >= 3;
-}
+/** Mínimo de 3 caracteres visíveis depois de normalizada: a regra do helper da T02, igual à do servidor. */
+export { justificativaValida } from './justificativa';
 
 /** Rodapé do protótipo (aplicacao.js L176) sem a palavra "fictícios": `Exibindo N de M registros`. */
 export function textoExibindo(exibidos: number, total: number): string {

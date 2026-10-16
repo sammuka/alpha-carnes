@@ -737,7 +737,7 @@ describe('justificativa com caracteres invisíveis', () => {
     fireEvent.change(motivo, { target: { value: ' a' + INVISIVEIS + 'bc ' } });
     await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
     await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/versoes'))).toBe(true));
-    expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.justificativa).toBe('abc');
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.justificativa).toBe('a' + INVISIVEIS + 'bc');
   });
 });
 

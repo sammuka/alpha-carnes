@@ -37,7 +37,7 @@ describe('justificativa e descrição medidas sem caracteres invisíveis', () =>
     expect(justificativaSchema.safeParse('\u200B\u200B\u200B\u200B').success).toBe(false);
     const ok = justificativaSchema.safeParse(' a\u200Bbc ');
     expect(ok.success).toBe(true);
-    if (ok.success) expect(ok.data).toBe('abc');
+    if (ok.success) expect(ok.data).toBe('a\u200Bbc');
   });
 
   it('a descrição da homologação segue a mesma regra', () => {
@@ -61,8 +61,8 @@ describe('normalizador único das justificativas e da descrição', () => {
     const ok = criarHomologacaoSchema.safeParse({ regraId: UUID, justificativa: ' Revisão \u2060concluída ', descricao: 'Ação \u200Bde teste' });
     expect(ok.success).toBe(true);
     if (ok.success) {
-      expect(ok.data.justificativa).toBe('Revisão concluída');
-      expect(ok.data.descricao).toBe('Ação de teste');
+      expect(ok.data.justificativa).toBe('Revisão \u2060concluída');
+      expect(ok.data.descricao).toBe('Ação \u200Bde teste');
     }
   });
 });

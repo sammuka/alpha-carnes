@@ -792,7 +792,7 @@ describe('justificativa com caracteres invisíveis', () => {
     fireEvent.change(campo, { target: { value: ' a' + INVISIVEIS + 'bc ' } });
     await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
     await waitFor(() => expect(chamadas.some((c) => c.metodo === 'PATCH')).toBe(true));
-    expect(chamadas.find((c) => c.metodo === 'PATCH')?.corpo?.justificativa).toBe('abc');
+    expect(chamadas.find((c) => c.metodo === 'PATCH')?.corpo?.justificativa).toBe('a' + INVISIVEIS + 'bc');
   });
 
   it('no diálogo de decisão, só caracteres invisíveis equivalem a vazio', async () => {

@@ -1,13 +1,10 @@
 import { z } from 'zod';
 import { SITUACOES_HOMOLOGACAO } from '../../../../../database/schema/fiscal-homologacoes.schema';
-import { normalizarJustificativa } from '../../../../../common/validators/justificativa';
+import { justificativaNormalizadaSchema } from '../../../../../common/validators/justificativa';
 import { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
-/** Descrição da revisão: normalizada como a justificativa (invisíveis removidos, trim) e então 3–500. */
-export const descricaoSchema = z
-  .string()
-  .transform(normalizarJustificativa)
-  .pipe(z.string().min(3).max(500));
+/** Descrição da revisão: a mesma regra da justificativa (pontas aparadas, ao menos 3 caracteres visíveis, até 500). */
+export const descricaoSchema = justificativaNormalizadaSchema;
 
 const camposDecisao = {
   versao: versaoSchema,
