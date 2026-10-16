@@ -91,7 +91,7 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
     await Promise.all([lista.carregar(), ficha.carregar(id)]);
   }
 
-  /** Executa a ação do servidor; a falha segue ao diálogo com o texto da tela e a marca de conflito. */
+  /** Executa a ação do servidor; a falha segue ao diálogo com o texto da tela e a indicação de conflito. */
   async function executar(id: string, chamada: () => Promise<unknown>, sucesso: string) {
     try {
       await chamada();
