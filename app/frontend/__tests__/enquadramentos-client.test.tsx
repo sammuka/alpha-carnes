@@ -227,16 +227,6 @@ describe('EnquadramentosClient', () => {
     expect(container.textContent).not.toMatch(/Marca/);
   });
 
-  it('falha ao carregar as opções dos filtros mostra erro e permite tentar de novo', async () => {
-    falharOperacoes = true;
-    const { user } = renderizar();
-    const aviso = await screen.findByText(/Não foi possível carregar as opções dos filtros/);
-    expect(aviso).toBeInTheDocument();
-    falharOperacoes = false;
-    await user.click(screen.getByRole('button', { name: 'Recarregar opções' }));
-    await waitFor(() => expect(screen.queryByText(/Não foi possível carregar as opções dos filtros/)).not.toBeInTheDocument());
-  });
-
   it.each(['Exportar', 'Exportar visão'])('%s repassa a busca da tela e baixa o arquivo', async (rotulo) => {
     const criar = jest.fn(() => 'blob:csv');
     const revogar = jest.fn();
@@ -414,35 +404,37 @@ describe('EnquadramentosClient', () => {
       });
     });
 
-    it('operação: com 101 operações mostra o aviso e mantém a selecionada fora da janela', async () => {
-      const recentes = Array.from({ length: 100 }, (_, i) => ({
-        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 900).padStart(12, '0')}`,
-        rotulo: `Operação ${i + 1}`,
-        data: '2026-10-01',
-      }));
+    it('operação: busca no servidor pelo termo digitado (data ou rótulo)', async () => {
       (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
         const url = new URL(String(entrada), 'http://localhost');
-        if (url.pathname === '/api/operacoes') return json(200, { data: recentes, total: 101, page: 1, pageSize: 100 });
+        if (url.pathname === '/api/operacoes') {
+          const termo = url.searchParams.get('search') ?? '';
+          const todas = [
+            { id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01' },
+            { id: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a99', rotulo: 'Operação rara', data: '2025-03-04' },
+          ].filter((o) => !termo || o.rotulo.toLowerCase().includes(termo.toLowerCase()));
+          return json(200, { data: todas, total: todas.length, page: 1, pageSize: 50 });
+        }
         return padrao(init?.method ?? 'GET', url.pathname);
       });
       const { user } = renderizar();
-      const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
-      celula.closest('tr')!.focus();
-      await user.keyboard('{Enter}');
-      await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
-      const gatilho = document.getElementById('enq-op')!;
-      expect(gatilho).toHaveTextContent('Compra e venda outubro');
-      await user.click(gatilho);
-      expect(await screen.findByText('Exibindo as 100 operações mais recentes')).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-op')!);
+      await user.type(screen.getByPlaceholderText('Buscar operação'), 'rara');
+      const buscou = () => (global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).startsWith('/api/operacoes') && String(u).includes('search=rara'));
+      await waitFor(() => expect(buscou()).toBe(true));
+      await user.click(await screen.findByText('Operação rara · 04/03/2025'));
+      expect(document.getElementById('enq-op')).toHaveTextContent('Operação rara · 04/03/2025');
     });
 
-    it('operação: sem excedente não mostra o aviso', async () => {
+    it('operação: lista as operações sem aviso de truncamento', async () => {
       const { user } = renderizar();
       await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
       await screen.findByRole('dialog');
       await user.click(document.getElementById('enq-op')!);
       await screen.findByText('Compra e venda outubro · 01/10/2026');
-      expect(screen.queryByText('Exibindo as 100 operações mais recentes')).not.toBeInTheDocument();
+      expect(screen.queryByText(/mais recentes/)).not.toBeInTheDocument();
     });
 
     it('mostra o erro da busca', async () => {
@@ -461,8 +453,8 @@ describe('EnquadramentosClient', () => {
       await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
       expect(document.getElementById('enq-prod')).toHaveTextContent('Acém');
       expect(document.getElementById('enq-cli')).toHaveTextContent('Açougue Central');
-      expect(document.getElementById('enq-cfop')).toHaveTextContent('5102 Venda de mercadoria');
-      expect(document.getElementById('enq-ncm')).toHaveTextContent('02013000 Carnes bovinas');
+      expect(document.getElementById('enq-cfop')).toHaveTextContent('5.102 Venda de mercadoria');
+      expect(document.getElementById('enq-ncm')).toHaveTextContent('0201.30.00 Carnes bovinas');
     });
   });
 

@@ -21,12 +21,13 @@ interface Props {
   searchPlaceholder: string;
   onChange: (opcao: OpcaoCombo | null) => void;
   clearable?: boolean;
+  disabled?: boolean;
 }
 
 const ATRASO_MS = 250;
 
 /** Combo pesquisável que consulta o cadastro no servidor a cada digitação (debounce) e descarta resposta obsoleta. */
-export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlaceholder, onChange, clearable }: Props) {
+export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlaceholder, onChange, clearable, disabled }: Props) {
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState('');
   const [resultado, setResultado] = useState<ResultadoBusca | null>(null);
@@ -63,6 +64,7 @@ export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlac
       items={itens}
       value={value}
       clearable={clearable}
+      disabled={disabled}
       onChange={(novo) => onChange(novo ? (opcoes.find((o) => o.id === novo) ?? { id: novo, rotulo }) : null)}
       placeholder={placeholder}
       searchPlaceholder={searchPlaceholder}

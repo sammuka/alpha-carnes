@@ -42,6 +42,23 @@ describe('fiscal-enquadramentos', () => {
     expect(lib.rotuloData('2026-10-15')).toBe('15/10/2026');
   });
 
+  it('mascara CFOP 9.999, NCM 9999.99.99 e CEST 99.999.99, inclusive parcial', () => {
+    expect(lib.mascararCfop('5102')).toBe('5.102');
+    expect(lib.mascararNcm('02013000')).toBe('0201.30.00');
+    expect(lib.mascararNcm('0201')).toBe('0201');
+    expect(lib.mascararNcm('020130')).toBe('0201.30');
+    expect(lib.mascararCest('1708700')).toBe('17.087.00');
+    expect(lib.mascararCest('17')).toBe('17');
+    expect(lib.mascararCest('170')).toBe('17.0');
+  });
+
+  it('sobreposição sem fim diz "a partir de", sem a expressão "em aberto"', () => {
+    const erro = new lib.ErroEnquadramento('x', 409, 'ENQUADRAMENTO_SOBREPOSTO', {
+      conflito: { codigo: '7', vigenciaInicio: '2026-10-15', vigenciaFim: null, prioridade: 1 },
+    });
+    expect(lib.mensagemSobreposicao(erro)).toBe('Há vigência sobreposta com o código 7. Vigência a partir de 15/10/2026, sem fim.');
+  });
+
   it('não exporta função que calcule tributo', () => {
     expect(Object.keys(lib).join(' ')).not.toMatch(/tributo|aliquota|cst|ibs|cbs/i);
   });

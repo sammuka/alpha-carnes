@@ -1,4 +1,4 @@
-import { extrairCodigoErro, extrairMensagemErro } from './error-message';
+import { extrairCodigoErro, extrairErrosPorCampo, extrairMensagemErro } from './error-message';
 
 /**
  * Operações fiscais e enquadramentos: rótulos, normalização e cliente HTTP do BFF.
@@ -51,6 +51,24 @@ export function codigoFiscalValido(tipo: 'cfops' | 'ncms', normalizado: string):
 export function normalizarCest(valor: string): string {
   return valor.replace(/\D/g, '').slice(0, 7);
 }
+
+function mascarar(valor: string, grupos: number[]): string {
+  const digitos = valor.replace(/[^0-9]/g, '').slice(0, grupos.reduce((soma, tamanho) => soma + tamanho, 0));
+  const partes: string[] = [];
+  let inicio = 0;
+  for (const tamanho of grupos) {
+    const parte = digitos.slice(inicio, inicio + tamanho);
+    if (!parte) break;
+    partes.push(parte);
+    inicio += tamanho;
+  }
+  return partes.join('.');
+}
+
+/** CFOP 9.999, NCM 9999.99.99 e CEST 99.999.99 (também parcial, para o campo em digitação). */
+export const mascararCfop = (valor: string) => mascarar(valor, [1, 3]);
+export const mascararNcm = (valor: string) => mascarar(valor, [4, 2, 2]);
+export const mascararCest = (valor: string) => mascarar(valor, [2, 3, 2]);
 
 export function rotuloData(iso: string): string {
   const [ano, mes, dia] = iso.split('-');
@@ -200,6 +218,52 @@ function envelope(body: unknown): Record<string, unknown> {
   return {};
 }
 
+/** Rótulos da tela para os campos que a validação do servidor aponta. */
+export const ROTULOS_CAMPOS: Record<string, string> = {
+  estabelecimentoId: 'Estabelecimento',
+  operacaoId: 'Operação',
+  tpNf: 'Tipo da nota',
+  finNfe: 'Finalidade',
+  cfopId: 'Operação fiscal (CFOP)',
+  abrangencia: 'Abrangência da operação',
+  tipoProduto: 'Origem do produto',
+  produtoId: 'Produto',
+  ncmId: 'Classificação fiscal (NCM)',
+  cest: 'Substituição tributária (CEST)',
+  clienteId: 'Cliente',
+  vigenciaInicio: 'Início de vigência',
+  vigenciaFim: 'Fim de vigência',
+  prioridade: 'Prioridade',
+  justificativa: 'Motivo da alteração',
+  codigo: 'Código',
+  descricao: 'Descrição',
+  versao: 'Versão',
+};
+
+/** Pré-condições do detalhe: rótulo legível e a pendência que as torna provisórias. */
+export const ROTULOS_PRE_CONDICAO: Record<string, { rotulo: string; pendencia?: string }> = {
+  ESTABELECIMENTO_APROVADO: { rotulo: 'Estabelecimento aprovado' },
+  VIGENCIA_INFORMADA: { rotulo: 'Vigência informada' },
+  CHAVE_COMPLETA: { rotulo: 'Chave de enquadramento completa' },
+  PRIORIDADE_SEMANTICA: { rotulo: 'Significado da prioridade definido', pendencia: 'H-E01-06' },
+  DESEMPATE_DEFINIDO: { rotulo: 'Regra de desempate definida', pendencia: 'H-E01-07' },
+  TABELA_OFICIAL_CFOP_NCM: { rotulo: 'Tabela oficial de CFOP e NCM carregada', pendencia: 'H-E01-08' },
+  CEST_VINCULADO_AO_NCM: { rotulo: 'CEST vinculado ao NCM', pendencia: 'H-E01-09' },
+  DATAS_COMERCIAL_FISCAL_EFETIVA: { rotulo: 'Datas comercial e fiscal efetiva definidas', pendencia: 'H-E01-10' },
+  DUPLA_APROVACAO: { rotulo: 'Dupla aprovação definida', pendencia: 'H-E01-11' },
+};
+
+function mensagemPorCampo(body: unknown): string | null {
+  const entradas = Object.entries(extrairErrosPorCampo(body));
+  if (entradas.length === 0) return null;
+  return entradas
+    .map(([caminho, texto]) => {
+      const rotulo = ROTULOS_CAMPOS[caminho.split('.')[0] ?? ''];
+      return rotulo ? rotulo + ': ' + texto : texto;
+    })
+    .join('. ');
+}
+
 function criarErro(status: number, body: unknown): ErroEnquadramento {
   const codigo = extrairCodigoErro(body);
   const dados = Object.fromEntries(
@@ -207,6 +271,7 @@ function criarErro(status: number, body: unknown): ErroEnquadramento {
   );
   let mensagem = extrairMensagemErro(body, 'Falha na operação.');
   if (codigo && MENSAGENS_POR_CODIGO[codigo]) mensagem = MENSAGENS_POR_CODIGO[codigo];
+  else if (status === 400) mensagem = mensagemPorCampo(body) ?? mensagem;
   else if (status >= 500) mensagem = 'Serviço indisponível no momento. Tente novamente.';
   return new ErroEnquadramento(mensagem, status, codigo, dados);
 }
@@ -215,8 +280,10 @@ export function mensagemSobreposicao(erro: ErroEnquadramento): string | null {
   if (erro.codigo !== 'ENQUADRAMENTO_SOBREPOSTO') return null;
   const conflito = erro.dados.conflito as ConflitoVigencia | undefined;
   if (!conflito?.codigo) return erro.message;
-  const fim = conflito.vigenciaFim ? rotuloData(conflito.vigenciaFim) : 'em aberto';
-  return `Há vigência sobreposta com o código ${conflito.codigo}. Vigência ${rotuloData(conflito.vigenciaInicio)} a ${fim}.`;
+  const vigencia = conflito.vigenciaFim
+    ? `${rotuloData(conflito.vigenciaInicio)} a ${rotuloData(conflito.vigenciaFim)}`
+    : `a partir de ${rotuloData(conflito.vigenciaInicio)}, sem fim`;
+  return `Há vigência sobreposta com o código ${conflito.codigo}. Vigência ${vigencia}.`;
 }
 
 export function textoConsulta(erro: ErroEnquadramento): string {
@@ -358,22 +425,9 @@ export const enquadramentosApi = {
     if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
     return res.blob();
   },
-  /** O endpoint não aceita busca: traz as 100 mais recentes e sinaliza quando há mais. */
-  opcoesOperacao: async (): Promise<{ opcoes: OpcaoCombo[]; truncado: boolean }> => {
-    const body = await chamar<unknown>('GET', `/api/operacoes?limite=${LIMITE_OPERACOES}`);
-    const bruto = linhas(body);
-    const total = typeof (body as { total?: unknown } | null)?.total === 'number' ? (body as { total: number }).total : bruto.length;
-    return {
-      opcoes: bruto.map((l) => ({
-        id: String(l.id),
-        rotulo: rotuloOperacao(String(l.rotulo ?? ''), String(l.data ?? '')),
-      })),
-      truncado: total > bruto.length || bruto.length >= LIMITE_OPERACOES,
-    };
-  },
 };
 
-export type TipoBusca = 'estabelecimentos' | 'produtos' | 'clientes' | 'cfops' | 'ncms';
+export type TipoBusca = 'estabelecimentos' | 'produtos' | 'clientes' | 'cfops' | 'ncms' | 'operacoes';
 
 export interface ResultadoBusca {
   opcoes: OpcaoCombo[];
@@ -384,8 +438,6 @@ export interface ResultadoBusca {
 }
 
 export const TAMANHO_BUSCA = 50;
-export const LIMITE_OPERACOES = 100;
-export const AVISO_OPERACOES = 'Exibindo as 100 operações mais recentes';
 export const AVISO_REFINAR = 'Há mais resultados do que os exibidos. Refine a busca.';
 
 const ROTA_BUSCA: Record<TipoBusca, string> = {
@@ -394,26 +446,30 @@ const ROTA_BUSCA: Record<TipoBusca, string> = {
   clientes: '/api/cadastros/clientes',
   cfops: '/cfops',
   ncms: '/ncms',
+  operacoes: '/api/operacoes',
 };
 
 /** Busca no servidor (parâmetro `search` dos cadastros) para os combos de produto, cliente, CFOP e NCM. */
 export async function buscarOpcoes(tipo: TipoBusca, termo: string): Promise<ResultadoBusca> {
   const comStatus = tipo === 'produtos' || tipo === 'clientes';
+  const paginacao = tipo === 'operacoes' ? { pagina: 1, limite: TAMANHO_BUSCA } : { page: 1, pageSize: TAMANHO_BUSCA };
   const body = await chamar<unknown>('GET', `${ROTA_BUSCA[tipo]}${qs({
-    page: 1,
-    pageSize: TAMANHO_BUSCA,
+    ...paginacao,
     status: comStatus ? 'ativo' : undefined,
     situacao: tipo === 'estabelecimentos' ? 'APPROVED' : undefined,
     search: termo.trim(),
   })}`);
   const bruto = linhas(body).filter((l) => tipo !== 'estabelecimentos' || l.situacao === 'APPROVED' || l.situacao === undefined);
-  const opcoes = bruto.filter(ativo).map((l): OpcaoCombo => {
+  const vivo = comStatus ? ativo : (l: Record<string, unknown>) => !l.deletedAt;
+  const opcoes = bruto.filter(vivo).map((l): OpcaoCombo => {
     if (tipo === 'estabelecimentos') return { id: String(l.id), rotulo: String(l.nome ?? '') };
     if (tipo === 'produtos') return { id: String(l.id), rotulo: String(l.nome ?? '') };
     if (tipo === 'clientes') {
       return { id: String(l.id), rotulo: String((typeof l.nomeFantasia === 'string' && l.nomeFantasia.trim()) || l.razaoSocial || '') };
     }
-    return { id: String(l.id), rotulo: `${String(l.codigo ?? '')} ${String(l.descricao ?? '')}`.trim() };
+    if (tipo === 'operacoes') return { id: String(l.id), rotulo: rotuloOperacao(String(l.rotulo ?? ''), String(l.data ?? '')) };
+    const codigo = tipo === 'cfops' ? mascararCfop(String(l.codigo ?? '')) : mascararNcm(String(l.codigo ?? ''));
+    return { id: String(l.id), rotulo: `${codigo} ${String(l.descricao ?? '')}`.trim() };
   });
   const total = typeof (body as { total?: unknown } | null)?.total === 'number' ? (body as { total: number }).total : bruto.length;
   return { opcoes, total, truncado: total > bruto.length };

@@ -3,7 +3,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { ComboboxField } from '@/components/ui/combobox-field';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
@@ -13,8 +12,9 @@ import {
   ROTULOS_FIN_NFE,
   ROTULOS_TIPO_PRODUTO,
   ROTULOS_TP_NF,
-  AVISO_OPERACOES,
-  TEXTO_VAZIO_COMBO,
+  mascararCest,
+  mascararCfop,
+  mascararNcm,
   normalizarCest,
   type CorpoEnquadramento,
   type DetalheEnquadramento,
@@ -27,30 +27,24 @@ export interface SelecaoCodigo {
   rotulo: string;
 }
 
-type ChaveBusca = 'estabelecimentoId' | 'cfopId' | 'ncmId' | 'produtoId' | 'clienteId';
+type ChaveBusca = 'estabelecimentoId' | 'operacaoId' | 'cfopId' | 'ncmId' | 'produtoId' | 'clienteId';
 type Rotulos = Record<ChaveBusca, string>;
-const ROTULOS_VAZIOS: Rotulos = { estabelecimentoId: '', cfopId: '', ncmId: '', produtoId: '', clienteId: '' };
+const ROTULOS_VAZIOS: Rotulos = { estabelecimentoId: '', operacaoId: '', cfopId: '', ncmId: '', produtoId: '', clienteId: '' };
 
 function rotulosDe(detalhe: DetalheEnquadramento): Rotulos {
   return {
     estabelecimentoId: detalhe.estabelecimentoNome,
-    cfopId: `${detalhe.cfopCodigo} ${detalhe.cfopDescricao}`.trim(),
-    ncmId: `${detalhe.ncmCodigo} ${detalhe.ncmDescricao}`.trim(),
+    operacaoId: detalhe.operacaoRotulo,
+    cfopId: `${mascararCfop(detalhe.cfopCodigo)} ${detalhe.cfopDescricao}`.trim(),
+    ncmId: `${mascararNcm(detalhe.ncmCodigo)} ${detalhe.ncmDescricao}`.trim(),
     produtoId: detalhe.produtoNome,
     clienteId: detalhe.clienteNome,
   };
 }
 
-export interface Catalogos {
-  operacoes: OpcaoCombo[];
-  /** Há mais operações no servidor do que as 100 carregadas. */
-  operacoesTruncadas: boolean;
-}
-
 interface Props {
   aberto: boolean;
   detalhe: DetalheEnquadramento | null;
-  catalogos: Catalogos;
   erro: string | null;
   selecaoCodigo?: SelecaoCodigo | null;
   onFechar: () => void;
@@ -58,6 +52,8 @@ interface Props {
   onErro: (mensagem: string | null) => void;
   onNovoCodigo: (tipo: 'cfops' | 'ncms') => void;
 }
+
+const PRIORIDADE_MAXIMA = 2147483647;
 
 const VAZIO: CorpoEnquadramento = {
   estabelecimentoId: '',
@@ -97,12 +93,8 @@ function deDetalhe(detalhe: DetalheEnquadramento): CorpoEnquadramento {
   };
 }
 
-function itens(opcoes: OpcaoCombo[]) {
-  return opcoes.map((opcao) => ({ id: opcao.id, label: opcao.rotulo }));
-}
-
 export function EnquadramentoDrawer({
-  aberto, detalhe, catalogos, erro, selecaoCodigo, onFechar, onSalvar, onErro, onNovoCodigo,
+  aberto, detalhe, erro, selecaoCodigo, onFechar, onSalvar, onErro, onNovoCodigo,
 }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
@@ -119,7 +111,8 @@ export function EnquadramentoDrawer({
     setForm(detalhe ? deDetalhe(detalhe) : VAZIO);
     setRotulos(detalhe ? rotulosDe(detalhe) : ROTULOS_VAZIOS);
     setAvisos(null);
-  }, [aberto, detalhe]);
+    // Recarga da ficha com o drawer aberto (evento em tempo real) não pode apagar o que o usuário digitou.
+  }, [aberto, detalhe?.id]);
 
   useEffect(() => {
     if (!aberto || !selecaoCodigo) return;
@@ -127,12 +120,6 @@ export function EnquadramentoDrawer({
     setForm((atual) => ({ ...atual, [chave]: selecaoCodigo.id }));
     setRotulos((atual) => ({ ...atual, [chave]: selecaoCodigo.rotulo }));
   }, [aberto, selecaoCodigo]);
-
-  // A operação selecionada continua exibida mesmo fora da janela das 100 mais recentes.
-  const itensOperacao = itens(catalogos.operacoes);
-  if (detalhe && form.operacaoId === detalhe.operacaoId && !itensOperacao.some((i) => i.id === form.operacaoId)) {
-    itensOperacao.unshift({ id: detalhe.operacaoId, label: detalhe.operacaoRotulo });
-  }
 
   function set<K extends keyof CorpoEnquadramento>(chave: K, valor: CorpoEnquadramento[K]) {
     setForm((atual) => ({ ...atual, [chave]: valor }));
@@ -144,11 +131,24 @@ export function EnquadramentoDrawer({
   }
 
   function verificar(): string | null {
-    if (form.justificativa.trim().length < 3) return 'Informe o motivo da alteração (3 a 500 caracteres).';
-    if (!form.vigenciaInicio) return 'Informe o início de vigência.';
-    if (form.vigenciaFim && form.vigenciaFim < form.vigenciaInicio) return 'Fim de vigência deve ser igual ou posterior ao início.';
-    if (form.prioridade < 1) return 'Prioridade deve ser um inteiro maior ou igual a 1.';
-    return null;
+    const faltando: string[] = [];
+    if (!detalhe && !form.estabelecimentoId) faltando.push('Estabelecimento');
+    if (!form.operacaoId) faltando.push('Operação');
+    if (!form.cfopId) faltando.push('Operação fiscal (CFOP)');
+    if (!form.produtoId) faltando.push('Produto');
+    if (!form.ncmId) faltando.push('Classificação fiscal (NCM)');
+    if (!form.cest) faltando.push('Substituição tributária (CEST)');
+    if (!form.clienteId) faltando.push('Cliente');
+    if (!form.vigenciaInicio) faltando.push('Início de vigência');
+    if (form.justificativa.trim().length < 3) faltando.push('Motivo da alteração (3 a 500 caracteres)');
+    const problemas: string[] = [];
+    if (faltando.length > 0) problemas.push('Preencha os campos obrigatórios: ' + faltando.join(', ') + '.');
+    if (form.cest && form.cest.length !== 7) problemas.push('Substituição tributária (CEST) deve ter 7 dígitos.');
+    if (form.vigenciaFim && form.vigenciaFim < form.vigenciaInicio) problemas.push('Fim de vigência deve ser igual ou posterior ao início.');
+    if (!Number.isInteger(form.prioridade) || form.prioridade < 1 || form.prioridade > PRIORIDADE_MAXIMA) {
+      problemas.push('Prioridade deve ser um inteiro entre 1 e ' + PRIORIDADE_MAXIMA + '.');
+    }
+    return problemas.length > 0 ? problemas.join(' ') : null;
   }
 
   async function salvar() {
@@ -181,19 +181,10 @@ export function EnquadramentoDrawer({
         </SheetHeader>
         <div className="grid gap-3 px-4">
           <Campo rotulo="Estabelecimento">
-            <ComboboxBusca id="enq-estab" tipo="estabelecimentos" value={form.estabelecimentoId} rotulo={rotulos.estabelecimentoId} onChange={(o) => escolher('estabelecimentoId', o)} placeholder="Estabelecimento" searchPlaceholder="Buscar estabelecimento" />
+            <ComboboxBusca id="enq-estab" tipo="estabelecimentos" value={form.estabelecimentoId} rotulo={rotulos.estabelecimentoId} onChange={(o) => escolher('estabelecimentoId', o)} placeholder="Estabelecimento" searchPlaceholder="Buscar estabelecimento" disabled={detalhe !== null} />
           </Campo>
           <Campo rotulo="Operação">
-            <ComboboxField
-              id="enq-op"
-              items={itensOperacao}
-              value={form.operacaoId}
-              onChange={(id) => set('operacaoId', id)}
-              placeholder="Operação"
-              searchPlaceholder="Buscar operação"
-              emptyText={TEXTO_VAZIO_COMBO}
-              footer={catalogos.operacoesTruncadas ? <p role="status" className="border-t px-3 py-2 text-xs text-muted-foreground">{AVISO_OPERACOES}</p> : undefined}
-            />
+            <ComboboxBusca id="enq-op" tipo="operacoes" value={form.operacaoId} rotulo={rotulos.operacaoId} onChange={(o) => escolher('operacaoId', o)} placeholder="Operação" searchPlaceholder="Buscar operação" />
           </Campo>
           <Campo rotulo="Tipo da nota">
             <select aria-label="Tipo da nota" className="h-8 w-full rounded-md border px-2 text-[13px]" value={form.tpNf} onChange={(e) => set('tpNf', e.target.value)}>
@@ -227,7 +218,7 @@ export function EnquadramentoDrawer({
             <Button type="button" variant="secondary" onClick={() => onNovoCodigo('ncms')}>Novo código</Button>
           </Campo>
           <Campo rotulo="Substituição tributária (CEST)" selo="H-E01-09">
-            <input aria-label="Substituição tributária (CEST)" className="h-8 w-full rounded-md border px-2 text-[13px]" inputMode="numeric" value={form.cest} onChange={(e) => set('cest', normalizarCest(e.target.value))} />
+            <input aria-label="Substituição tributária (CEST)" className="h-8 w-full rounded-md border px-2 text-[13px] font-data" inputMode="numeric" value={mascararCest(form.cest)} onChange={(e) => set('cest', normalizarCest(e.target.value))} />
           </Campo>
           <Campo rotulo="Cliente">
             <ComboboxBusca id="enq-cli" tipo="clientes" value={form.clienteId} rotulo={rotulos.clienteId} onChange={(o) => escolher('clienteId', o)} placeholder="Cliente" searchPlaceholder="Buscar cliente" />
