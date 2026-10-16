@@ -558,9 +558,9 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain(cabecalho);
     expect(res.text).toContain(criado.body.codigo);
     expect(res.text).toContain(base.rotulo);
+    expect(res.text).toContain('01/01/2026;31/12/2026');
     expect(res.text).toContain(`${base.cfopCodigo[0]}.${base.cfopCodigo.slice(1)}`);
-    expect(res.text).toContain('2026-01-01');
-    expect(res.text).toContain('2026-12-31');
+    expect(res.text).not.toContain('2026-01-01');
     expect(res.text).toContain('Filial Osasco');
     expect(res.text).toContain('Saída');
     expect(res.text).toContain('Operação normal');

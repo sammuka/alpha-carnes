@@ -15,6 +15,7 @@ import {
   mascararCest,
   mascararCfop,
   mascararNcm,
+  limparJustificativa,
   normalizarCest,
   type CorpoEnquadramento,
   type DetalheEnquadramento,
@@ -47,11 +48,35 @@ interface Props {
   detalhe: DetalheEnquadramento | null;
   erro: string | null;
   selecaoCodigo?: SelecaoCodigo | null;
+  /** Campo (id do elemento) que recebe o foco ao abrir um novo registro. */
+  focoInicial?: string | null;
+  /** A ficha em edição foi removida por outro usuário: edição bloqueada. */
+  removido?: boolean;
+  /** O servidor recusou o envio por versão desatualizada: oferece Recarregar dados. */
+  conflito?: boolean;
+  /** Busca a ficha atual e atualiza a versão capturada; null quando não foi possível. */
+  onRecarregar?: () => Promise<DetalheEnquadramento | null>;
   onFechar: () => void;
   onSalvar: (corpo: CorpoEnquadramento) => Promise<string | null>;
   onErro: (mensagem: string | null) => void;
   onNovoCodigo: (tipo: 'cfops' | 'ncms') => void;
 }
+
+const CAMPOS_ROTULOS = {
+  operacaoId: 'Operação',
+  tpNf: 'Tipo da nota',
+  finNfe: 'Finalidade',
+  cfopId: 'Operação fiscal (CFOP)',
+  abrangencia: 'Abrangência da operação',
+  tipoProduto: 'Origem do produto',
+  produtoId: 'Produto',
+  ncmId: 'Classificação fiscal (NCM)',
+  cest: 'Substituição tributária (CEST)',
+  clienteId: 'Cliente',
+  vigenciaInicio: 'Início de vigência',
+  vigenciaFim: 'Fim de vigência',
+  prioridade: 'Prioridade',
+} as const;
 
 const PRIORIDADE_MAXIMA = 2147483647;
 
@@ -94,7 +119,7 @@ function deDetalhe(detalhe: DetalheEnquadramento): CorpoEnquadramento {
 }
 
 export function EnquadramentoDrawer({
-  aberto, detalhe, erro, selecaoCodigo, onFechar, onSalvar, onErro, onNovoCodigo,
+  aberto, detalhe, erro, selecaoCodigo, focoInicial = null, removido = false, conflito = false, onRecarregar, onFechar, onSalvar, onErro, onNovoCodigo,
 }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
@@ -105,11 +130,14 @@ export function EnquadramentoDrawer({
   const [form, setForm] = useState<CorpoEnquadramento>(VAZIO);
   const [avisos, setAvisos] = useState<string | null>(null);
   const [rotulos, setRotulos] = useState<Rotulos>(ROTULOS_VAZIOS);
+  // Ficha como estava na última leitura, para apontar o que outro usuário mudou depois.
+  const [base, setBase] = useState<CorpoEnquadramento | null>(null);
 
   useEffect(() => {
     if (!aberto) return;
     setForm(detalhe ? deDetalhe(detalhe) : VAZIO);
     setRotulos(detalhe ? rotulosDe(detalhe) : ROTULOS_VAZIOS);
+    setBase(detalhe ? deDetalhe(detalhe) : null);
     setAvisos(null);
     // Recarga da ficha com o drawer aberto (evento em tempo real) não pode apagar o que o usuário digitou.
   }, [aberto, detalhe?.id]);
@@ -130,6 +158,22 @@ export function EnquadramentoDrawer({
     setRotulos((atual) => ({ ...atual, [chave]: opcao?.rotulo ?? '' }));
   }
 
+  async function recarregar() {
+    const fresca = await onRecarregar?.();
+    if (!fresca) return;
+    const nova = deDetalhe(fresca);
+    const mudou = base
+      ? (Object.keys(CAMPOS_ROTULOS) as Array<keyof typeof CAMPOS_ROTULOS>)
+          .filter((chave) => (base[chave] ?? '') !== (nova[chave] ?? ''))
+          .map((chave) => CAMPOS_ROTULOS[chave])
+      : [];
+    setBase(nova);
+    setAvisos(
+      (mudou.length > 0 ? `Alterado por outro usuário: ${mudou.join(', ')}. ` : 'Nenhum campo foi alterado por outro usuário. ')
+      + 'Seus campos digitados foram mantidos; revise e salve novamente.',
+    );
+  }
+
   function verificar(): string | null {
     const faltando: string[] = [];
     if (!detalhe && !form.estabelecimentoId) faltando.push('Estabelecimento');
@@ -140,7 +184,7 @@ export function EnquadramentoDrawer({
     if (!form.cest) faltando.push('Substituição tributária (CEST)');
     if (!form.clienteId) faltando.push('Cliente');
     if (!form.vigenciaInicio) faltando.push('Início de vigência');
-    if (form.justificativa.trim().length < 3) faltando.push('Motivo da alteração (3 a 500 caracteres)');
+    if (limparJustificativa(form.justificativa).length < 3) faltando.push('Motivo da alteração (3 a 500 caracteres)');
     const problemas: string[] = [];
     if (faltando.length > 0) problemas.push('Preencha os campos obrigatórios: ' + faltando.join(', ') + '.');
     if (form.cest && form.cest.length !== 7) problemas.push('Substituição tributária (CEST) deve ter 7 dígitos.');
@@ -160,7 +204,7 @@ export function EnquadramentoDrawer({
     const corpo = {
       ...form,
       cest: normalizarCest(form.cest),
-      justificativa: form.justificativa.trim(),
+      justificativa: limparJustificativa(form.justificativa),
       vigenciaFim: form.vigenciaFim || undefined,
     };
     const mensagem = await onSalvar(corpo);
@@ -171,6 +215,13 @@ export function EnquadramentoDrawer({
     <Sheet open={aberto} onOpenChange={(open) => { if (!open) onFechar(); }}>
       <SheetContent
         onCloseAutoFocus={retornoFoco}
+        onOpenAutoFocus={(event) => {
+          const alvo = focoInicial ? document.getElementById(focoInicial) : null;
+          if (alvo) {
+            event.preventDefault();
+            alvo.focus();
+          }
+        }}
         onPointerDownOutside={manterDialogoAninhado}
         onFocusOutside={manterDialogoAninhado}
         onInteractOutside={manterDialogoAninhado}
@@ -230,19 +281,25 @@ export function EnquadramentoDrawer({
             <DatePickerField aria-label="Fim de vigência" value={form.vigenciaFim ?? ''} onChange={(iso) => set('vigenciaFim', iso)} />
           </Campo>
           <Campo rotulo="Prioridade" selo="H-E01-06">
-            <input aria-label="Prioridade" type="number" min={1} className="h-8 w-full rounded-md border px-2 text-[13px]" value={form.prioridade} onChange={(e) => set('prioridade', Number(e.target.value))} />
+            <input id="enq-prioridade" aria-label="Prioridade" type="number" min={1} className="h-8 w-full rounded-md border px-2 text-[13px]" value={form.prioridade} onChange={(e) => set('prioridade', Number(e.target.value))} />
           </Campo>
           <label className="grid gap-1 text-xs" htmlFor="enq-motivo">
             Motivo da alteração *
             <textarea id="enq-motivo" className="min-h-16 rounded-md border px-2 py-1 text-[13px]" value={form.justificativa} onChange={(e) => set('justificativa', e.target.value)} />
           </label>
           {avisos && <p role="alert" className="text-sm text-destructive">{avisos}</p>}
+          {removido && <p role="alert" className="text-sm text-destructive">Este registro foi removido por outro usuário.</p>}
           {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
+          {conflito && onRecarregar && (
+            <div>
+              <Button type="button" variant="secondary" onClick={() => void recarregar()}>Recarregar dados</Button>
+            </div>
+          )}
         </div>
         <SheetFooter>
           <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
           <Button type="button" variant="secondary" onClick={() => setAvisos(verificar())}>Verificar dados</Button>
-          <Button type="button" onClick={() => void salvar()}>Salvar rascunho</Button>
+          <Button type="button" disabled={removido} onClick={() => void salvar()}>Salvar rascunho</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>

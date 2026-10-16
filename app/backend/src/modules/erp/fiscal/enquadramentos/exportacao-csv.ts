@@ -51,6 +51,12 @@ export function mascararCest(codigo: string): string {
   return /^[0-9]{7}$/.test(codigo) ? `${codigo.slice(0, 2)}.${codigo.slice(2, 5)}.${codigo.slice(5)}` : codigo;
 }
 
+/** ISO (aaaa-mm-dd) para dd/MM/aaaa, como a tela. */
+function dataBr(iso: string | null): string {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso) : null;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+}
+
 function celula(original: string): string {
   // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
   const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
@@ -83,8 +89,8 @@ export function montarCsvEnquadramentos(linhas: LinhaExportacaoEnquadramento[]):
     linha.codigo,
     linha.operacao,
     mascararCfop(linha.cfop),
-    linha.vigenciaInicio,
-    linha.vigenciaFim ?? '',
+    dataBr(linha.vigenciaInicio),
+    dataBr(linha.vigenciaFim),
     linha.estabelecimento,
     ROTULOS_TP_NF[linha.tpNf] ?? linha.tpNf,
     ROTULOS_FIN_NFE[linha.finNfe] ?? linha.finNfe,

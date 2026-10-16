@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { SITUACOES_HOMOLOGACAO } from '../../../../../database/schema/fiscal-homologacoes.schema';
-import { buscaSchema, justificativaSchema, semInvisiveis, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+import { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
-export const descricaoSchema = z.preprocess(semInvisiveis, z.string().trim().min(3).max(500));
+/** Largura zero (U+200B a U+200D) e BOM (U+FEFF) não contam para o mínimo, como na justificativa. */
+export const descricaoSchema = z
+  .string()
+  .transform((valor) => valor.replace(/[\u200B-\u200D\uFEFF]/g, ''))
+  .pipe(z.string().trim().min(3).max(500));
 
 const camposDecisao = {
   versao: versaoSchema,

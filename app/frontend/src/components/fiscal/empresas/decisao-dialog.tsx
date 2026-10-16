@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
-import { textoUtil } from '@/lib/fiscal-comum-ui';
 import {
   ehConflitoConcorrente,
   ErroFiscal,
@@ -88,7 +87,9 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
 
   const executar = async (confirmarTroca: boolean) => {
     if (!decisao) return;
-    if (textoUtil(justificativa).length < 3) {
+    // Caracteres de largura zero não contam para o mínimo (o servidor os remove).
+    const texto = justificativa.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    if (texto.length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
     }
@@ -98,7 +99,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setConflito(false);
     setProcessando(true);
     try {
-      await decisao.executar(textoUtil(justificativa), confirmarTroca);
+      await decisao.executar(texto, confirmarTroca);
       setDesafio(null);
       toast.success(decisao.mensagemSucesso);
       onConcluido();
