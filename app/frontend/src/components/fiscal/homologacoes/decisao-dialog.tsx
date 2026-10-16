@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { textoUtil } from '@/lib/fiscal-comum-ui';
@@ -42,6 +42,8 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
   const [versao, setVersao] = useState(0);
   const [conflito, setConflito] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
 
   useEffect(() => {
     setJustificativa('');
@@ -51,9 +53,11 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
     setProcessando(null);
     setConflito(false);
     setVersao(decisao?.versao ?? 0);
+    emVoo.current = false;
   }, [decisao]);
 
   async function executar(acao: AcaoDecisao) {
+    if (emVoo.current) return;
     if (textoUtil(justificativa).length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
@@ -62,6 +66,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
     setErro(null);
     setAviso(null);
     setConflito(false);
+    emVoo.current = true;
     setProcessando(acao.rotulo);
     try {
       await acao.executar(textoUtil(justificativa), versao);
@@ -70,6 +75,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       setConflito(falha instanceof ErroAcaoHomologacao && falha.conflito);
     } finally {
+      emVoo.current = false;
       setProcessando(null);
     }
   }

@@ -1,6 +1,7 @@
 import {
   baixarArquivo,
   buscarCatalogo,
+  textoUtil,
   errosPorCampo,
   mensagemRotulada,
   textoExibindo,
@@ -67,5 +68,15 @@ describe('fiscal-comum-ui', () => {
     expect(clique).toHaveBeenCalled();
     expect(revogar).toHaveBeenCalledWith('blob:x');
     clique.mockRestore();
+  });
+});
+
+describe('textoUtil', () => {
+  it('remove formatação invisível e brancos visuais, apara espaços Unicode e preserva acentos', () => {
+    expect(textoUtil('\u2060\u2800\u034F\u3164\u115F\u1160\uFFA0\u00AD\u200E\u180E')).toBe('');
+    expect(textoUtil('\u00A0\u2003 abc \u2028')).toBe('abc');
+    expect(textoUtil('a\u200Bb\uFEFFc')).toBe('abc');
+    expect(textoUtil('a\u0301bc')).toBe('a\u0301bc');
+    expect(textoUtil('Ação 🙂')).toBe('Ação 🙂');
   });
 });

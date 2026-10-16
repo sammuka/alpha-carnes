@@ -117,6 +117,8 @@ let respostaPre: Response | null = null;
 let respostaComparar: Response | null = null;
 let liberarFicha: Promise<void> | null = null;
 let chamadas: Chamada[] = [];
+/** Segura as mutações (POST) até ser liberado, para haver pedido em voo. */
+let portaoMutacao: Promise<void> | null = null;
 /** Segura a resposta da listagem cuja busca é a chave, para simular resposta que chega fora de ordem. */
 let portoesLista: Record<string, Promise<void>> = {};
 
@@ -165,6 +167,7 @@ async function responder(metodo: string, url: URL): Promise<Response> {
     return csv();
   }
   if (metodo === 'POST' && caminho.startsWith(base)) {
+    if (portaoMutacao) await portaoMutacao;
     if (proximaMutacao) return proximaMutacao;
     return json(201, { ...detalhe, id: ID_NOVA, numeroVersao: 3 });
   }
@@ -196,6 +199,7 @@ beforeEach(() => {
   liberarFicha = null;
   chamadas = [];
   portoesLista = {};
+  portaoMutacao = null;
   window.sessionStorage.clear();
   mockRealtime.mockClear();
   global.fetch = jest.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
@@ -734,5 +738,86 @@ describe('justificativa com caracteres invisíveis', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
     await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/versoes'))).toBe(true));
     expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.justificativa).toBe('abc');
+  });
+});
+
+describe('padrões do Portão A r3', () => {
+  const INVISIVEIS = '\u2060\u2800\u034F\u3164';
+
+  it('(a) o drawer de criação não é bloqueado quando a ficha some', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    respostaFicha = json(404, { message: 'Simulação fiscal não encontrada' });
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(within(drawer).queryByText(/não está mais disponível/)).not.toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: 'Salvar rascunho' })).toBeEnabled();
+  });
+
+  it('(b) os brancos visuais não contam como motivo, no drawer e na versão nova', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.change(within(drawer).getByLabelText('Motivo da alteração'), { target: { value: INVISIVEIS } });
+    await user.click(within(drawer).getByRole('button', { name: 'Verificar dados' }));
+    expect(await within(drawer).findByText('Informe o motivo da alteração (3 a 500 caracteres).')).toBeInTheDocument();
+    await user.click(within(drawer).getByRole('button', { name: 'Cancelar' }));
+    await user.click(await screen.findByRole('button', { name: 'Descartar e sair' }));
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    fireEvent.change(within(dialogo).getByLabelText('Motivo da alteração'), { target: { value: INVISIVEIS } });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('Informe o motivo da alteração (3 a 500 caracteres).')).toBeInTheDocument();
+  });
+
+  it('(c) fechar o diálogo aberto por item de menu devolve o foco ao gatilho do menu', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const gatilho = await screen.findByRole('button', { name: /Ações do processo/ });
+    gatilho.focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('menuitem', { name: 'Comparar versões' }));
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(gatilho).toHaveFocus();
+  });
+
+  it('(d) duplo clique em Salvar a versão nova envia uma só vez enquanto há pedido em voo', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da alteração'), 'Novo desconto');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.dblClick(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(within(dialogo).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes'))).toHaveLength(1);
+  });
+
+  it('(d) duplo clique em Salvar a simulação nova envia uma só vez', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await escolherCombo(user, drawer, 'sim-enq', 'Buscar enquadramento', '12', '12 · Compra outubro');
+    await waitFor(() => expect(document.getElementById('sim-estab')).toHaveTextContent('Osasco'));
+    await user.type(within(drawer).getByLabelText('Quantidade'), '10,000');
+    await user.type(within(drawer).getByLabelText('Peso informado na nota (kg)'), '982,000');
+    await user.type(within(drawer).getByLabelText('Valor'), '1.000,00');
+    await user.type(within(drawer).getByLabelText('Desconto'), '0,00');
+    fireEvent.change(within(drawer).getByLabelText('Competência'), { target: { value: '2026-10' } });
+    await user.type(within(drawer).getByLabelText('Motivo da alteração'), 'Simulação de outubro');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.dblClick(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/simulacoes')).toHaveLength(1);
   });
 });

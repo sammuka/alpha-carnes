@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
+import { textoUtil } from '@/lib/fiscal-comum-ui';
 import {
   ehConflitoConcorrente,
   ErroFiscal,
@@ -70,6 +71,8 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   const [erro, setErro] = useState<string | null>(null);
   const [erroCampo, setErroCampo] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const [conflito, setConflito] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -86,9 +89,9 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   }, [decisao]);
 
   const executar = async (confirmarTroca: boolean) => {
-    if (!decisao) return;
-    // Caracteres de largura zero não contam para o mínimo (o servidor os remove).
-    const texto = justificativa.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    if (!decisao || emVoo.current) return;
+    // Invisíveis e brancos visuais não contam para o mínimo (o servidor aplica o mesmo normalizador).
+    const texto = textoUtil(justificativa);
     if (texto.length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
@@ -97,6 +100,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setErro(null);
     setAviso(null);
     setConflito(false);
+    emVoo.current = true;
     setProcessando(true);
     try {
       await decisao.executar(texto, confirmarTroca);
@@ -120,6 +124,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
         : null;
       setErro([mensagemDoErroFiscal(falha), conflito].filter(Boolean).join(' '));
     } finally {
+      emVoo.current = false;
       setProcessando(false);
     }
   };

@@ -55,6 +55,8 @@ export function HomologacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
   const [verificado, setVerificado] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const [sujo, setSujo] = useState(false);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
   const ultimaRegra = useRef('');
@@ -119,8 +121,9 @@ export function HomologacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
   }
 
   async function salvar() {
-    if (!verificar()) return;
+    if (emVoo.current || !verificar()) return;
     setVerificado(false);
+    emVoo.current = true;
     setSalvando(true);
     try {
       const falha = await onSalvar({ ...form, descricao: textoUtil(form.descricao), justificativa: textoUtil(form.justificativa) });
@@ -131,6 +134,7 @@ export function HomologacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
     } catch (erro) {
       setErroSalvar(erro instanceof ErroHomologacao ? mensagemDeHomologacao(erro) : 'Falha na operação.');
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }

@@ -81,6 +81,8 @@ let respostaMemorias: Response | null = null;
 let respostaHistorico: Response | null = null;
 let liberarFicha: Promise<void> | null = null;
 let chamadas: Chamada[] = [];
+/** Segura as mutações (POST) até ser liberado, para haver pedido em voo. */
+let portaoMutacao: Promise<void> | null = null;
 /** Segura a resposta da listagem cuja busca é a chave, para simular resposta que chega fora de ordem. */
 let portoesLista: Record<string, Promise<void>> = {};
 
@@ -117,6 +119,7 @@ async function responder(metodo: string, url: URL): Promise<Response> {
     ] });
   }
   if (metodo === 'POST' && caminho.startsWith(base)) {
+    if (portaoMutacao) await portaoMutacao;
     if (proximaMutacao) return proximaMutacao;
     if (caminho.endsWith('/aprovar')) detalhe = { ...detalhe, situacao: 'Aprovada', aprovador: 'Carlos Lima', versao: detalhe.versao + 1 };
     if (caminho.endsWith('/rejeitar')) detalhe = { ...detalhe, situacao: 'Rejeitada', versao: detalhe.versao + 1 };
@@ -155,6 +158,7 @@ beforeEach(() => {
   liberarFicha = null;
   chamadas = [];
   portoesLista = {};
+  portaoMutacao = null;
   window.sessionStorage.clear();
   mockRealtime.mockClear();
   (toast.success as jest.Mock).mockClear();
@@ -786,5 +790,97 @@ describe('justificativa com caracteres invisíveis', () => {
     await user.click(within(drawer).getByRole('button', { name: 'Verificar dados' }));
     expect(await within(drawer).findByText('Informe a descrição (3 a 500 caracteres).')).toBeInTheDocument();
     expect(within(drawer).getByText('Informe a justificativa auditável (3 a 500 caracteres).')).toBeInTheDocument();
+  });
+});
+
+describe('padrões do Portão A r3', () => {
+  const INVISIVEIS = '\u2060\u2800\u034F\u3164';
+
+  it('(a) o drawer de criação não é bloqueado quando a ficha some', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    respostaFicha = json(404, { message: 'Homologação não encontrada' });
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(within(drawer).queryByText(/não está mais disponível/)).not.toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: 'Salvar rascunho' })).toBeEnabled();
+  });
+
+  it('(b) os brancos visuais não contam na decisão, no vínculo e no drawer; os acentos contam', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const decisao = await abrirAcao(user, 'Aprovar/rejeitar');
+    fireEvent.change(within(decisao).getByLabelText('Justificativa auditável'), { target: { value: INVISIVEIS } });
+    await user.click(within(decisao).getByRole('button', { name: 'Aprovar' }));
+    expect(await within(decisao).findByText('Informe a justificativa (mínimo de 3 caracteres).')).toBeInTheDocument();
+    fireEvent.change(within(decisao).getByLabelText('Justificativa auditável'), { target: { value: 'ab\u0301c' } });
+    await user.click(within(decisao).getByRole('button', { name: 'Aprovar' }));
+    await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/aprovar'))).toBe(true));
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/aprovar'))?.corpo?.justificativa).toBe('ab\u0301c');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.change(within(drawer).getByLabelText('Descrição'), { target: { value: INVISIVEIS } });
+    await user.click(within(drawer).getByRole('button', { name: 'Verificar dados' }));
+    expect(await within(drawer).findByText('Informe a descrição (3 a 500 caracteres).')).toBeInTheDocument();
+  });
+
+  it('(c) fechar o diálogo aberto por item de menu devolve o foco ao gatilho do menu', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const gatilho = await screen.findByRole('button', { name: /Ações do processo/ });
+    gatilho.focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('menuitem', { name: 'Revisar diff' }));
+    await screen.findByRole('dialog');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(gatilho).toHaveFocus();
+  });
+
+  it('(d) duplo clique em Aprovar envia uma só vez enquanto há pedido em voo', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const dialogo = await abrirAcao(user, 'Aprovar/rejeitar');
+    await user.type(within(dialogo).getByLabelText('Justificativa auditável'), 'Decisão do segundo usuário');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.dblClick(within(dialogo).getByRole('button', { name: 'Aprovar' }));
+    expect(within(dialogo).getByRole('button', { name: 'Rejeitar' })).toBeDisabled();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar'))).toHaveLength(1);
+  });
+
+  it('(d) duplo clique em Vincular e em Salvar a revisão nova envia uma só vez', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'cenários aprovados' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByRole('combobox', { name: /Memória calculada/ }));
+    await user.click(await screen.findByRole('option', { name: '72 · versão 1 · Novembro de 2026' }));
+    await user.type(within(dialogo).getByLabelText('Justificativa auditável'), 'Vínculo da memória');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.dblClick(within(dialogo).getByRole('button', { name: 'Vincular' }));
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/cenarios'))).toHaveLength(1);
+
+    portaoMutacao = null;
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await user.click(drawer.querySelector('#hom-regra')!);
+    await user.type(await screen.findByPlaceholderText('Buscar enquadramento'), '12');
+    await user.click(await screen.findByRole('option', { name: '12 · versão 2' }));
+    await user.type(within(drawer).getByLabelText('Descrição'), 'Revisão da alíquota');
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Publicar nova alíquota');
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.dblClick(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/homologacoes')).toHaveLength(1);
   });
 });

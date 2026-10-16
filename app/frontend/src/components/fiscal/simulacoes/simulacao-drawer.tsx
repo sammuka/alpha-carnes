@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buscarEnquadramentos, errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
@@ -98,6 +98,8 @@ export function SimulacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
   const [verificado, setVerificado] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const [preenchendo, setPreenchendo] = useState(false);
   const [sujo, setSujo] = useState(false);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
@@ -179,8 +181,9 @@ export function SimulacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
   }
 
   async function salvar() {
-    if (!verificar()) return;
+    if (emVoo.current || !verificar()) return;
     setVerificado(false);
+    emVoo.current = true;
     setSalvando(true);
     try {
       const falha = await onSalvar({ ...form, justificativa: textoUtil(form.justificativa) });
@@ -191,6 +194,7 @@ export function SimulacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
     } catch (erro) {
       setErroSalvar(erro instanceof ErroSimulacao ? mensagemDeSimulacao(erro) : 'Falha na operação.');
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }
@@ -267,7 +271,7 @@ export function SimulacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
           <SheetFooter>
             <Button type="button" variant="secondary" onClick={tentarFechar}>Cancelar</Button>
             <Button type="button" variant="secondary" onClick={() => verificar()}>Verificar dados</Button>
-            <Button type="submit" form="simulacao-form" loading={salvando} disabled={preenchendo}>Salvar rascunho</Button>
+            <Button type="submit" form="simulacao-form" loading={salvando} disabled={salvando || preenchendo}>Salvar rascunho</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

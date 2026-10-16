@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { errosPorCampo, textoUtil } from '@/lib/fiscal-comum-ui';
@@ -25,6 +25,8 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
 
   useEffect(() => {
     if (!aberto) return;
@@ -40,12 +42,14 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
   }
 
   async function confirmar() {
+    if (emVoo.current) return;
     const locais: Record<string, string> = {};
     if (!codigo.trim()) locais.codigo = 'Informe o código.';
     if (!descricao.trim()) locais.descricao = 'Informe a descrição.';
     if (textoUtil(motivo).length < 3) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
     setErros(locais);
     if (Object.keys(locais).length > 0) return;
+    emVoo.current = true;
     setSalvando(true);
     setErro(null);
     try {
@@ -54,6 +58,7 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       if (falha instanceof ErroRegra) setErros(errosPorCampo(falha.porCampo));
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }

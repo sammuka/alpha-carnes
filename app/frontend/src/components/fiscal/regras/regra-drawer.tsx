@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { buscarEnquadramentos, errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
@@ -133,6 +133,8 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
   const [verificado, setVerificado] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const [conflito, setConflito] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   const [recarregado, setRecarregado] = useState(false);
@@ -214,9 +216,10 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
   }
 
   async function salvar() {
-    if (!verificar()) return;
+    if (emVoo.current || !verificar()) return;
     setVerificado(false);
     setRecarregado(false);
+    emVoo.current = true;
     setSalvando(true);
     try {
       const falha = await onSalvar({
@@ -232,6 +235,7 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
     } catch (erro) {
       setErroSalvar(erro instanceof ErroRegra ? mensagemDeRegra(erro) : 'Falha na operação.');
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }
@@ -331,7 +335,7 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
           <SheetFooter>
             <Button type="button" variant="secondary" onClick={tentarFechar}>Cancelar</Button>
             <Button type="button" variant="secondary" onClick={() => verificar()}>Verificar dados</Button>
-            <Button type="submit" form="regra-form" loading={salvando} disabled={preenchendo || Boolean(bloqueado)}>Salvar rascunho</Button>
+            <Button type="submit" form="regra-form" loading={salvando} disabled={salvando || preenchendo || Boolean(bloqueado)}>Salvar rascunho</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

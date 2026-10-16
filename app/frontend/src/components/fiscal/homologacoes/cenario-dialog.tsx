@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { textoUtil } from '@/lib/fiscal-comum-ui';
@@ -39,6 +39,8 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
   const [versao, setVersao] = useState(0);
   const [conflito, setConflito] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const regraId = alvo?.regraId ?? '';
   const buscar = useCallback((termo: string) => buscarMemoriasDaRegra(regraId, termo), [regraId]);
 
@@ -56,6 +58,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
   }, [aberto]);
 
   async function vincular() {
+    if (emVoo.current) return;
     const locais: Record<string, string> = {};
     if (!memoria) locais.memoria = 'Escolha a memória calculada.';
     if (textoUtil(justificativa).length < 3) locais.justificativa = 'Informe a justificativa (mínimo de 3 caracteres).';
@@ -64,6 +67,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
     setAviso(null);
     setConflito(false);
     if (!memoria || Object.keys(locais).length > 0) return;
+    emVoo.current = true;
     setSalvando(true);
     try {
       await onVincular(memoria.id, textoUtil(justificativa), versao);
@@ -71,6 +75,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       setConflito(falha instanceof ErroAcaoHomologacao && falha.conflito);
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }
@@ -130,7 +135,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={salvando} onClick={onFechar}>Cancelar</Button>
-          <Button type="button" loading={salvando} disabled={Boolean(bloqueado)} onClick={() => void vincular()}>Vincular</Button>
+          <Button type="button" loading={salvando} disabled={salvando || Boolean(bloqueado)} onClick={() => void vincular()}>Vincular</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
@@ -30,6 +30,8 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
   const [conflito, setConflito] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   const [recarregado, setRecarregado] = useState(false);
@@ -54,7 +56,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
   }
 
   async function enviar() {
-    if (!origem) return;
+    if (!origem || emVoo.current) return;
     const locais: Record<string, string> = {};
     if (normalizarPercentual(pIcms) === null) locais.pIcms = 'Informe um percentual de 0,00 a 100,00.';
     if (!inicio) locais.vigenciaInicio = 'Informe o início de vigência.';
@@ -64,6 +66,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
     setErro(null);
     if (Object.keys(locais).length > 0) return;
     setRecarregado(false);
+    emVoo.current = true;
     setSalvando(true);
     try {
       const falha = await onSalvar({
@@ -89,6 +92,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
         setErros(errosPorCampo(falha.porCampo));
       }
     } finally {
+      emVoo.current = false;
       setSalvando(false);
     }
   }
@@ -141,7 +145,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
           )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
-            <Button type="submit" loading={salvando} disabled={Boolean(bloqueado)}>Salvar rascunho</Button>
+            <Button type="submit" loading={salvando} disabled={salvando || Boolean(bloqueado)}>Salvar rascunho</Button>
           </div>
         </form>
       </DialogContent>
