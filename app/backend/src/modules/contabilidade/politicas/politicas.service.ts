@@ -376,7 +376,7 @@ export class PoliticasContabilizacaoService {
   }
 
   async exportarCsv(query: ListarPoliticasQuery): Promise<string> {
-    const bruto = await this.consulta(this.filtro(query)).orderBy(this.ordemDe(query));
+    const bruto = await this.consulta(this.filtro(query)).orderBy(...this.ordemDe(query));
     const itens = bruto.map((linha) => this.apresentar(linha));
     const cabecalho = ['Competência', 'Situação', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência'];
     const linhas = itens.map((item) => [
@@ -394,9 +394,11 @@ export class PoliticasContabilizacaoService {
   async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number }> {
     const filtro = this.filtro(query);
     const ordem = this.ordemDe(query);
-    const linhas = await this.consulta(filtro).orderBy(ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA);
-    const [contagem] = await this.db.select({ total: sql<number>`count(*)::int` })
-      .from(politicasContabilizacao)
+    // Lista e total no mesmo instantâneo: sem isso, uma gravação entre as duas consultas gera itens vazio com total 1.
+    return this.db.transaction(async (tx) => {
+      const linhas = await this.consulta(filtro, tx).orderBy(...ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA);
+      const [contagem] = await tx.select({ total: sql<number>`count(*)::int` })
+        .from(politicasContabilizacao)
       .innerJoin(politicaVersoes, and(
         eq(politicaVersoes.politicaId, politicasContabilizacao.id),
         isNull(politicaVersoes.deletedAt),
@@ -407,7 +409,8 @@ export class PoliticasContabilizacaoService {
       ))
       .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
       .where(filtro);
-    return { itens: linhas.map((linha) => this.apresentar(linha)), total: Number(contagem?.total ?? 0) };
+      return { itens: linhas.map((linha) => this.apresentar(linha)), total: Number(contagem?.total ?? 0) };
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   }
 
   async obter(codigo: string): Promise<PoliticaApresentada> {
@@ -451,9 +454,9 @@ export class PoliticasContabilizacaoService {
     return { contas, centros };
   }
 
-  private consulta(extra?: SQL) {
+  private consulta(extra?: SQL, executor: Banco | Tx = this.db) {
     const aprovador = alias(usuarios, 'aprovador_politica');
-    return this.db.select({
+    return executor.select({
       codigo: politicasContabilizacao.codigo,
       tipoEvento: politicasContabilizacao.tipoEvento,
       competencia: politicasContabilizacao.competencia,
@@ -493,12 +496,12 @@ export class PoliticasContabilizacaoService {
     if (query.situacao) termos.push(eq(politicaVersoes.situacao, query.situacao));
     if (query.competencia) termos.push(eq(politicasContabilizacao.competencia, `${query.competencia}-01`));
     if (query.q) {
-      const padrao = `%${query.q}%`;
+      const padrao = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
       termos.push(sql`(
-        ${nomeDebito} ilike ${padrao}
-        or ${nomeCredito} ilike ${padrao}
-        or ${centrosCusto.nome} ilike ${padrao}
-        or ${rotuloTipo} ilike ${padrao}
+        ${nomeDebito} ilike ${padrao} escape '\\'
+        or ${nomeCredito} ilike ${padrao} escape '\\'
+        or ${centrosCusto.nome} ilike ${padrao} escape '\\'
+        or ${rotuloTipo} ilike ${padrao} escape '\\'
       )`);
     }
     return and(...termos);
@@ -506,7 +509,10 @@ export class PoliticasContabilizacaoService {
 
   private ordemDe(query: ListarPoliticasQuery) {
     const coluna = this.colunaOrdem(query.ordenar);
-    return query.direcao === 'desc' ? desc(coluna) : asc(coluna);
+    // codigo é único entre as políticas vivas: desempate estável para paginar sem repetir nem perder linha.
+    return query.direcao === 'desc'
+      ? [desc(coluna), desc(politicasContabilizacao.codigo)]
+      : [asc(coluna), asc(politicasContabilizacao.codigo)];
   }
 
   private colunaOrdem(ordenar: ListarPoliticasQuery['ordenar']) {
@@ -576,7 +582,9 @@ export class PoliticasContabilizacaoService {
         sql`${politicaSimulacoes.valor} > 0`,
         isNull(politicaSimulacoes.deletedAt),
       )).limit(1);
-    if (!simulacao) throw new RegraPoliticaException('mapeamento ausente', codigo);
+    if (!simulacao) {
+      throw new RegraPoliticaException('Simule a versão com valor maior que zero antes de aprovar.', codigo);
+    }
     const idsDasContas = [versao.contaDebitoId, versao.contaCreditoId];
     const codigosDasContas = new Map((await tx.select({ id: contasContabeis.id, codigo: contasContabeis.codigo })
       .from(contasContabeis).where(inArray(contasContabeis.id, idsDasContas))).map((c) => [c.id, c.codigo]));

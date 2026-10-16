@@ -237,7 +237,7 @@ describe('Políticas de contabilização', () => {
     await prepararContasAnaliticas();
     const politica = await service.configurar(dtoConfigurar(), autorId);
     await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
-      .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+      .rejects.toMatchObject({ status: 422, response: { message: 'Simule a versão com valor maior que zero antes de aprovar.', codigo: politica.codigo } });
     expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
   });
 
@@ -529,7 +529,7 @@ describe('entrada inválida responde 400 e não grava', () => {
         select p.id, 1, 0, 0, 0 from politicas_contabilizacao p where p.codigo = ${politica.codigo}
       `);
       await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
-        .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+        .rejects.toMatchObject({ status: 422, response: { message: 'Simule a versão com valor maior que zero antes de aprovar.', codigo: politica.codigo } });
       expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
     });
 
@@ -681,7 +681,7 @@ describe('entrada inválida responde 400 e não grava', () => {
       await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: ' ' }, outraPessoaId))
         .rejects.toMatchObject(ESPERADO('Informe justificativa para auditoria.', politica.codigo, 422));
       await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
-        .rejects.toMatchObject(ESPERADO('mapeamento ausente', politica.codigo, 422));
+        .rejects.toMatchObject(ESPERADO('Simule a versão com valor maior que zero antes de aprovar.', politica.codigo, 422));
       await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, autorId))
         .rejects.toMatchObject(ESPERADO('aprovador diferente do autor', politica.codigo, 422));
       expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
@@ -773,6 +773,71 @@ describe('entrada inválida responde 400 e não grava', () => {
       from contas_contabeis c where c.id = v.conta_id and c.codigo = '1.1.01'`);
     await expect(service.configurar(dtoConfigurar({ competencia: '2026-12' }), autorId))
       .rejects.toMatchObject(ESPERADO('mapeamento ausente', 'LIQUIDACAO-2026-12', 422));
+  });
+
+  describe('listagem estável', () => {
+    const base = { pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' } as const;
+
+    it('pagina sem duplicar nem perder linha em empate, em cada ordenação e sentido', async () => {
+      await prepararContasAnaliticas();
+      for (let mes = 1; mes <= 9; mes += 1) {
+        for (const tipoEvento of ['LIQUIDACAO', 'REGISTRO', 'CANCELAMENTO', 'ESTORNO', 'TARIFA'] as const) {
+          await service.configurar(dtoConfigurar({ tipoEvento, competencia: `2027-${String(mes).padStart(2, '0')}` }), autorId);
+        }
+      }
+      for (const ordenar of ['competencia', 'contaDebito', 'contaCredito', 'centroCusto', 'tipoEvento'] as const) {
+        for (const direcao of ['asc', 'desc'] as const) {
+          const codigos: string[] = [];
+          let total = 0;
+          for (let pagina = 1; pagina <= 3; pagina += 1) {
+            const r = await service.listar({ ...base, ordenar, direcao, pagina });
+            total = r.total;
+            codigos.push(...r.itens.map((i) => i.codigo));
+          }
+          expect(total).toBe(45);
+          expect(codigos).toHaveLength(45);
+          expect(new Set(codigos).size).toBe(45);
+          const csv = (await service.exportarCsv({ ...base, ordenar, direcao })).split('\n');
+          expect(csv).toHaveLength(46);
+        }
+      }
+    });
+
+    it('lista e total vêm do mesmo instante sob escrita concorrente', async () => {
+      await prepararContasAnaliticas();
+      await service.configurar(dtoConfigurar({ competencia: '2027-01' }), autorId);
+      let gravando = true;
+      const gravacao = (async () => {
+        for (let ano = 2028; ano <= 2029; ano += 1) {
+          for (let mes = 1; mes <= 12; mes += 1) {
+            await service.configurar(dtoConfigurar({ competencia: `${ano}-${String(mes).padStart(2, '0')}` }), autorId);
+          }
+        }
+        gravando = false;
+      })();
+      const leituras: { n: number; total: number }[] = [];
+      const leitor = async () => {
+        while (gravando) {
+          const r = await service.listar({ ...base, pagina: 1 });
+          leituras.push({ n: r.itens.length, total: r.total });
+        }
+      };
+      await Promise.all([gravacao, leitor(), leitor(), leitor(), leitor()]);
+      expect(leituras.length).toBeGreaterThan(5);
+      for (const l of leituras) expect(l.n).toBe(Math.min(l.total, 20));
+    });
+
+    it('busca trata % e _ como texto literal', async () => {
+      await prepararContasAnaliticas();
+      await plano.criar(dtoConta({ codigo: '1.1.02', classificacao: 'analitica', contaPaiCodigo: '1', nome: 'Caixa_100%' }), autorId);
+      await aprovarDireto('1.1.02');
+      await service.configurar(dtoConfigurar(), autorId);
+      await service.configurar(dtoConfigurar({ competencia: '2026-11', contaDebitoCodigo: '1.1.02' }), autorId);
+      expect((await service.listar({ ...base, q: '%' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: '_' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: 'Caixa_100%' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: 'Caixa' })).total).toBe(2);
+    });
   });
 
   it('opções devolvem contas analíticas vigentes e centros', async () => {
