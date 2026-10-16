@@ -885,8 +885,8 @@ describe('Plano de contas', () => {
 
     it('pagina sem duplicar nem perder linha em empate, em cada ordenação e sentido', async () => {
       await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
-      for (let i = 1; i <= 45; i += 1) {
-        await service.criar(dtoBase({ codigo: String(i).padStart(3, '0'), nome: 'Igual' }), userId);
+      for (let i = 1; i <= 100; i += 1) {
+        await service.criar(dtoBase({ codigo: String(i).padStart(4, '0'), nome: 'Igual' }), userId);
       }
       // Reescreve as linhas em ordem aleatória: a ordem física deixa de coincidir com o código.
       const ids = await db.execute(sql`select id from conta_versoes order by random()`);
@@ -897,16 +897,16 @@ describe('Plano de contas', () => {
         for (const direcao of ['asc', 'desc'] as const) {
           const codigos: string[] = [];
           let total = 0;
-          for (let pagina = 1; pagina <= 3; pagina += 1) {
+          for (let pagina = 1; pagina <= 5; pagina += 1) {
             const r = await service.listar({ ...base, ordenar, direcao, pagina });
             total = r.total;
             codigos.push(...r.itens.map((i) => i.codigo));
           }
-          expect(total).toBe(45);
-          expect(codigos).toHaveLength(45);
-          expect(new Set(codigos).size).toBe(45);
+          expect(total).toBe(100);
+          expect(codigos).toHaveLength(100);
+          expect(new Set(codigos).size).toBe(100);
           const csv = (await service.exportarCsv({ ...base, ordenar, direcao })).replace('﻿', '').split('\n');
-          expect(csv).toHaveLength(46);
+          expect(csv).toHaveLength(101);
         }
       }
     });

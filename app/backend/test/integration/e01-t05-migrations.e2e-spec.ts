@@ -56,10 +56,14 @@ describe('E01-T05 — migration de homologações de regras', () => {
     expect(destinos.join(' ')).not.toMatch(/notas_fiscais/);
   });
 
-  it('a última tag do journal é 0048_e01_t05_homologacoes_regras', () => {
+  it('o journal tem 0048_e01_t05_homologacoes_regras no idx 48 e só migrations posteriores depois dela', () => {
     const journal = JSON.parse(
       readFileSync(join(process.cwd(), 'src/database/migrations/meta/_journal.json'), 'utf8'),
-    ) as { entries: Array<{ tag: string }> };
-    expect(journal.entries.at(-1)?.tag).toBe('0048_e01_t05_homologacoes_regras');
+    ) as { entries: Array<{ idx: number; tag: string }> };
+    const posicao = journal.entries.findIndex((e) => e.tag === '0048_e01_t05_homologacoes_regras');
+    expect(journal.entries[posicao]?.idx).toBe(48);
+    for (const posterior of journal.entries.slice(posicao + 1)) {
+      expect(Number(posterior.tag.slice(0, 4))).toBeGreaterThan(48);
+    }
   });
 });
