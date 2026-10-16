@@ -16,7 +16,7 @@ describe('normalizarJustificativa', () => {
     expect(normalizarJustificativa(texto)).toBe('');
   });
 
-  it('preserva acentos, marcas combinantes e emoji', () => {
+  it('preserva acentos combinantes e emoji', () => {
     expect(normalizarJustificativa('  Correção \u{1F600}  ')).toBe('Correção \u{1F600}');
     expect(normalizarJustificativa('é')).toBe('é');
   });
