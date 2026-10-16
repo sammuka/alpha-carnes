@@ -24,6 +24,7 @@ import {
   type RegimeVigente,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
+import { normalizarJustificativa } from '@/lib/justificativa';
 
 /** Descreve uma decisão que exige justificativa: submeter, aprovar, rejeitar, suspender, remover… */
 export interface DecisaoPendente {
