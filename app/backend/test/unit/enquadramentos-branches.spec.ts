@@ -346,6 +346,7 @@ describe('EnquadramentosService — ramos', () => {
     const inativarVazio = servico(dbVazio);
     jest.spyOn(inativarVazio as never, 'obterBloqueado' as never).mockResolvedValue(anterior('ATIVA') as never);
     jest.spyOn(inativarVazio as never, 'travarAprovado' as never).mockResolvedValue({ id: ID } as never);
+    jest.spyOn(inativarVazio as never, 'exigirSemRegraVigente' as never).mockResolvedValue(undefined as never);
     await expect(inativarVazio.inativar(ID, { versao: 1, justificativa: JUSTIFICATIVA }, 'u1'))
       .rejects.toBeInstanceOf(ConflictException);
 
@@ -365,6 +366,17 @@ describe('EnquadramentosService — ramos', () => {
     const remover = servico(dbVazio);
     jest.spyOn(remover as never, 'obterBloqueado' as never).mockResolvedValue(anterior('ATIVA') as never);
     jest.spyOn(remover as never, 'travarAprovado' as never).mockResolvedValue({ id: ID } as never);
+    jest.spyOn(remover as never, 'exigirSemRegraVigente' as never).mockResolvedValue(undefined as never);
     await expect(remover.remover(ID, { justificativa: JUSTIFICATIVA }, 'u1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('exigirSemRegraVigente recusa com regra submetida ou aprovada e libera sem regra', async () => {
+    const consulta = (linhas: unknown[]) => ({
+      select: () => ({ from: () => ({ where: () => ({ limit: () => ({ for: async () => linhas }) }) }) }),
+    });
+    const guarda = servico({}) as unknown as { exigirSemRegraVigente: (tx: unknown, id: string) => Promise<void> };
+    await expect(guarda.exigirSemRegraVigente(consulta([{ codigo: '7' }]), ID))
+      .rejects.toMatchObject({ response: { codigo: 'ENQUADRAMENTO_COM_REGRA_ATIVA', regraCodigo: '7' } });
+    await expect(guarda.exigirSemRegraVigente(consulta([]), ID)).resolves.toBeUndefined();
   });
 });

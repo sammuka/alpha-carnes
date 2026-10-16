@@ -1,0 +1,892 @@
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { eq, sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+import { cleanupDb, createTestApp, createTestUser, joinSetCookie } from '../helpers/test-app';
+
+const MOTIVO = 'Regra inicial da vigência de 2026.';
+const MOTIVO_SIM = 'Motivo da alteração desta simulação.';
+
+function codigoDe(body: { codigo?: string; message?: { codigo?: string } | string }): string | undefined {
+  if (typeof body.codigo === 'string') return body.codigo;
+  return typeof body.message === 'object' ? body.message.codigo : undefined;
+}
+
+function cnpjDe(base12: string): string {
+  for (let i = 0; i < 100; i += 1) {
+    const candidato = `${base12}${String(i).padStart(2, '0')}`;
+    if (validarCnpjAlfanumerico(candidato)) return candidato;
+  }
+  throw new Error(`CNPJ sem DV para ${base12}`);
+}
+
+function cnpjNumerico(base12: string): string {
+  const digitos = base12.split('').map(Number);
+  const calcular = (qtd: number): void => {
+    let soma = 0;
+    let peso = 2;
+    for (let i = qtd - 1; i >= 0; i -= 1) {
+      soma += (digitos[i] ?? 0) * peso;
+      peso = peso === 9 ? 2 : peso + 1;
+    }
+    const resto = soma % 11;
+    digitos.push(resto < 2 ? 0 : 11 - resto);
+  };
+  calcular(12);
+  calcular(13);
+  return digitos.join('');
+}
+
+describe('E01-T04 simulações fiscais', () => {
+  let app: INestApplication;
+  let admin = '';
+  let adminB = '';
+  let gestor = '';
+  let gestorEmail = '';
+  let gestorSenha = '';
+  let seq = 80;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
+
+  beforeAll(async () => {
+    app = await createTestApp();
+    await app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db.execute(sql`
+      DELETE FROM perfis_permissoes
+      WHERE perfil_id = (SELECT id FROM perfis WHERE slug = 'gestor')
+        AND permissao_id IN (
+          SELECT id FROM permissoes
+          WHERE codigo IN ('FISCAL_SIMULACOES_LER', 'FISCAL_SIMULACOES_GERENCIAR')
+        )
+    `);
+    const a = await createTestUser(app, { perfil: 'administrador' });
+    const g = await createTestUser(app, { perfil: 'gestor' });
+    gestorEmail = g.adminEmail;
+    gestorSenha = g.adminPassword;
+    admin = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: a.adminEmail, password: a.adminPassword }));
+    gestor = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: gestorEmail, password: gestorSenha }));
+    const emailB = `admin-b-sim-${Date.now()}@test.local`;
+    const senhaB = 'TestPass@123456';
+    const criado = await request(app.getHttpServer())
+      .post('/usuarios')
+      .set('Cookie', admin)
+      .send({ nome: 'Admin B', email: emailB, password: senhaB, perfis: ['administrador'] });
+    expect(criado.status).toBe(201);
+    adminB = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: emailB, password: senhaB }));
+    fetchSpy = jest.spyOn(global, 'fetch');
+  });
+
+  afterAll(async () => {
+    fetchSpy.mockRestore();
+    await cleanupDb(app);
+    await app.close();
+  });
+
+  function db() {
+    return app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db;
+  }
+
+  function raiz(): string {
+    seq += 1;
+    return `71SM${String(seq).padStart(4, '0')}`;
+  }
+
+  function dataOp(): string {
+    const dia = ((seq - 1) % 28) + 1;
+    const mes = (Math.floor((seq - 1) / 28) % 12) + 1;
+    return `2097-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  }
+
+  async function cenario(vigencia: { inicio?: string; fim?: string | null } = {}) {
+    const cnpjRaiz = raiz();
+    const empresa = await request(app.getHttpServer())
+      .post('/fiscal/empresas')
+      .set('Cookie', admin)
+      .send({ razaoSocial: `Empresa ${cnpjRaiz}`, cnpjRaiz, justificativa: MOTIVO });
+    expect(empresa.status).toBe(201);
+    const estab = await request(app.getHttpServer())
+      .post('/fiscal/estabelecimentos')
+      .set('Cookie', admin)
+      .send({
+        empresaId: empresa.body.id,
+        nome: 'Filial Osasco',
+        cnpj: cnpjDe(`${cnpjRaiz}0001`),
+        inscricaoEstadual: '123456789',
+        inscricaoMunicipal: '98765',
+        uf: 'SP',
+        cnaes: [{ codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' }],
+        justificativa: MOTIVO,
+      });
+    expect(estab.status).toBe(201);
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', admin)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    expect(submetido.status).toBe(200);
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(aprovado.status).toBe(200);
+    const operacao = await request(app.getHttpServer())
+      .post('/operacoes/extraordinaria')
+      .set('Cookie', admin)
+      .send({ data: dataOp(), rotulo: `Compra ${cnpjRaiz}` });
+    expect(operacao.status).toBe(201);
+    const produto = await request(app.getHttpServer())
+      .post('/produtos')
+      .set('Cookie', admin)
+      .send({ codigo: `P-${cnpjRaiz}`, nome: 'Acém', unidadePedido: 'kg', atributosJson: { fiscal: { ncm: '99999999', cfop: '9999' } } });
+    expect(produto.status).toBe(201);
+    const cliente = await request(app.getHttpServer())
+      .post('/clientes')
+      .set('Cookie', admin)
+      .send({
+        codigo: `C-${cnpjRaiz}`,
+        razaoSocial: 'Açougue Central LTDA',
+        nomeFantasia: 'Açougue Central',
+        documentoFiscal: cnpjNumerico(`8${String(seq).padStart(11, '0')}`),
+        faixaPreco: 'A',
+      });
+    expect(cliente.status).toBe(201);
+    const cfop = await request(app.getHttpServer())
+      .post('/fiscal/cfops')
+      .set('Cookie', admin)
+      .send({ codigo: String(5300 + (seq % 70)).padStart(4, '0'), descricao: `CFOP ${cnpjRaiz}`, justificativa: MOTIVO });
+    expect(cfop.status).toBe(201);
+    const ncm = await request(app.getHttpServer())
+      .post('/fiscal/ncms')
+      .set('Cookie', admin)
+      .send({ codigo: String(4000000 + seq).padStart(8, '0'), descricao: `NCM ${cnpjRaiz}`, justificativa: MOTIVO });
+    expect(ncm.status).toBe(201);
+    const enquadramento = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', admin)
+      .send({
+        estabelecimentoId: aprovado.body.id,
+        operacaoId: operacao.body.id,
+        tpNf: '1',
+        finNfe: '1',
+        cfopId: cfop.body.id,
+        abrangencia: 'INTERNA',
+        tipoProduto: 'REVENDA',
+        produtoId: produto.body.id,
+        ncmId: ncm.body.id,
+        cest: '1708700',
+        clienteId: cliente.body.id,
+        vigenciaInicio: vigencia.inicio ?? '2026-01-01',
+        vigenciaFim: vigencia.fim === undefined ? '2026-12-31' : vigencia.fim,
+        prioridade: 1,
+        justificativa: MOTIVO,
+      });
+    expect(enquadramento.status).toBe(201);
+    const beneficio = await request(app.getHttpServer())
+      .post('/fiscal/beneficios-fiscais')
+      .set('Cookie', admin)
+      .send({ codigo: `SP${String(300000 + seq).padStart(6, '0')}`, descricao: `Benefício ${cnpjRaiz}`, justificativa: MOTIVO });
+    expect(beneficio.status).toBe(201);
+    const classificacao = await request(app.getHttpServer())
+      .post('/fiscal/classificacoes-ibs-cbs')
+      .set('Cookie', admin)
+      .send({ codigo: String(100000 + seq).padStart(6, '0'), descricao: `Classificação ${cnpjRaiz}`, justificativa: MOTIVO });
+    expect(classificacao.status).toBe(201);
+    return {
+      empresaId: empresa.body.id as string,
+      estabelecimentoId: aprovado.body.id as string,
+      operacaoId: operacao.body.id as string,
+      clienteId: cliente.body.id as string,
+      produtoId: produto.body.id as string,
+      ncmId: ncm.body.id as string,
+      cfopId: cfop.body.id as string,
+      enquadramentoId: enquadramento.body.id as string,
+      beneficioFiscalId: beneficio.body.id as string,
+      classificacaoIbsCbsId: classificacao.body.id as string,
+    };
+  }
+
+  async function aprovarRegra(base: Awaited<ReturnType<typeof cenario>>, extra: Record<string, unknown> = {}) {
+    const criada = await request(app.getHttpServer())
+      .post('/fiscal/regras')
+      .set('Cookie', admin)
+      .send({
+        enquadramentoId: base.enquadramentoId,
+        operacaoId: base.operacaoId,
+        cfopId: base.cfopId,
+        icmsCst: '20',
+        pRedBc: '41,67',
+        pIcms: '12,00',
+        beneficioFiscalId: base.beneficioFiscalId,
+        ipiCst: '53',
+        pisCst: '06',
+        ibsCst: '000',
+        classificacaoIbsCbsId: base.classificacaoIbsCbsId,
+        vigenciaInicio: '2026-01-01',
+        vigenciaFim: '2026-12-31',
+        justificativa: MOTIVO,
+        ...extra,
+      });
+    expect(criada.status).toBe(201);
+    const submetida = await request(app.getHttpServer())
+      .post(`/fiscal/regras/${criada.body.id}/submeter`)
+      .set('Cookie', admin)
+      .send({ versao: criada.body.versao, justificativa: MOTIVO });
+    expect(submetida.status).toBe(200);
+    const aprovada = await request(app.getHttpServer())
+      .post(`/fiscal/regras/${criada.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetida.body.versao, justificativa: MOTIVO });
+    expect(aprovada.status).toBe(200);
+    return { regraId: criada.body.id as string, base };
+  }
+
+  function corpoDe(base: Awaited<ReturnType<typeof cenario>>, extra: Record<string, unknown> = {}) {
+    return {
+      estabelecimentoId: base.estabelecimentoId,
+      operacaoId: base.operacaoId,
+      clienteId: base.clienteId,
+      produtoId: base.produtoId,
+      ncmId: base.ncmId,
+      quantidade: '10,000',
+      pesoNf: '982,000',
+      valor: '1.000,00',
+      desconto: '0,00',
+      competencia: '2026-10',
+      enquadramentoId: base.enquadramentoId,
+      justificativa: MOTIVO_SIM,
+      ...extra,
+    };
+  }
+
+  function simular(cookies: string, corpo: Record<string, unknown>) {
+    return request(app.getHttpServer()).post('/fiscal/simulacoes').set('Cookie', cookies).send(corpo);
+  }
+
+  function explicar(cookies: string, id: string) {
+    return request(app.getHttpServer()).get(`/fiscal/simulacoes/${id}/explicacao`).set('Cookie', cookies);
+  }
+
+  async function contarNotas() {
+    const notas = await db().execute(sql`SELECT COUNT(*)::int AS n FROM notas_fiscais`);
+    const fornecedor = await db().execute(sql`SELECT COUNT(*)::int AS n FROM notas_fiscais_fornecedor`);
+    return {
+      notas: Number((notas.rows[0] as { n: number }).n),
+      fornecedor: Number((fornecedor.rows[0] as { n: number }).n),
+    };
+  }
+
+  async function limparSimulacoes() {
+    await db().execute(sql`DELETE FROM simulacoes_fiscais`);
+  }
+
+  it('competência fora da vigência não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario({ fim: '2027-12-31' }));
+    await limparSimulacoes();
+    const res = await simular(admin, corpoDe(aprovada.base, { competencia: '2027-01' }));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('FALTA_REFERENCIA_LEGAL');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('regra que começa em novembro não cobre outubro', async () => {
+    const aprovada = await aprovarRegra(await cenario(), { vigenciaInicio: '2026-11-01' });
+    await limparSimulacoes();
+    const res = await simular(admin, corpoDe(aprovada.base, { competencia: '2026-10' }));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('FALTA_REFERENCIA_LEGAL');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('desconto maior que o valor não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    await limparSimulacoes();
+    const res = await simular(admin, corpoDe(aprovada.base, { valor: '1.000,00', desconto: '1.000,01' }));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('DESCONTO_MAIOR_QUE_VALOR');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('produto diferente do enquadramento não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const outro = await request(app.getHttpServer())
+      .post('/produtos')
+      .set('Cookie', admin)
+      .send({ codigo: `P-OUTRO-${seq}`, nome: 'Patinho', unidadePedido: 'kg', atributosJson: {} });
+    expect(outro.status).toBe(201);
+    await limparSimulacoes();
+    const res = await simular(admin, corpoDe(aprovada.base, { produtoId: outro.body.id }));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('ENQUADRAMENTO_DIVERGENTE');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('gestor sem FISCAL_SIMULACOES_* → 403', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const res = await simular(gestor, corpoDe(aprovada.base));
+    expect(res.status).toBe(403);
+  });
+
+  it('LER sem GERENCIAR → 403 no POST', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const me = await request(app.getHttpServer()).get('/auth/me').set('Cookie', gestor);
+    expect(me.status).toBe(200);
+    const atuais = me.body.permissoes as string[];
+    const comLeitura = await request(app.getHttpServer())
+      .put('/perfis/gestor/permissoes')
+      .set('Cookie', admin)
+      .send({ permissoes: [...atuais, 'FISCAL_SIMULACOES_LER'] });
+    expect(comLeitura.status).toBe(200);
+    try {
+      const relogado = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: gestorEmail, password: gestorSenha }));
+      const res = await simular(relogado, corpoDe(aprovada.base));
+      expect(res.status).toBe(403);
+    } finally {
+      const restaurado = await request(app.getHttpServer())
+        .put('/perfis/gestor/permissoes')
+        .set('Cookie', admin)
+        .send({ permissoes: atuais });
+      expect(restaurado.status).toBe(200);
+      gestor = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: gestorEmail, password: gestorSenha }));
+    }
+  });
+
+  it('base tributável diferente do valor bruto grava a memória', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const corpo = corpoDe(aprovada.base, { valor: '1.000,00', desconto: '0,00', competencia: '2026-10' });
+    const res = await simular(admin, corpo);
+    expect(res.status).toBe(201);
+    expect(res.body.situacao).toBe('Calculada');
+    expect(res.body.baseTributavel).toBe('583.30');
+    expect(res.body.icms).toBe('70.00');
+    expect(res.body.baseDifereBruto).toBe(true);
+    const explicacao = await explicar(admin, res.body.id);
+    expect(explicacao.status).toBe(200);
+    expect(explicacao.body.textoBase).toContain('1.000,00');
+    expect(explicacao.body.textoBase).toContain('583,30');
+    expect(explicacao.body.semAliquota.find((l: { rotulo: string }) => l.rotulo === 'Tratamento IPI').texto)
+      .toBe('Esta regra não guarda alíquota deste tributo; nenhum valor é calculado.');
+    expect(JSON.stringify(explicacao.body.semAliquota)).not.toContain('0,00');
+  });
+
+  it('simulação não grava nota nem documento', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const antes = await contarNotas();
+    const regrasAntes = Number((await db().execute(sql`SELECT COUNT(*)::int AS n FROM regras_tributarias`)).rows[0].n);
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    expect(await contarNotas()).toEqual(antes);
+    const texto = JSON.stringify(res.body);
+    expect(texto).not.toMatch(/xml|protocolo|danfe|"chave"/i);
+    const regras = await db().execute(sql`SELECT COUNT(*)::int AS n FROM regras_tributarias`);
+    expect(regras.rows[0]).toMatchObject({ n: regrasAntes });
+  });
+
+  it('um administrador simula sozinho', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+  });
+
+  it('GET detalhe devolve base 583.30, ICMS 70.00 e competência 2026-10', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const detalhe = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}`).set('Cookie', admin);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.situacao).toBe('Calculada');
+    expect(detalhe.body.competencia).toBe('2026-10');
+    expect(detalhe.body.competenciaRotulo).toBe('Outubro de 2026');
+    expect(detalhe.body.baseTributavel).toBe('583.30');
+    expect(detalhe.body.icms).toBe('70.00');
+  });
+
+  it('a NCM aparece com máscara no detalhe e na explicação', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const detalhe = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}`).set('Cookie', admin);
+    expect(detalhe.body.ncm).toMatch(/^\d{4}\.\d{2}\.\d{2} — /);
+    const explicacao = await explicar(admin, criada.body.id);
+    const linha = (explicacao.body.linhas as { rotulo: string; valor: string }[]).find((l) => l.rotulo === 'Classificação fiscal (NCM)');
+    expect(linha?.valor).toMatch(/^\d{4}\.\d{2}\.\d{2} — /);
+  });
+
+  it('quantidade não muda a base', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const pouca = await simular(admin, corpoDe(aprovada.base, { quantidade: '1,000' }));
+    const muita = await simular(admin, corpoDe(aprovada.base, { quantidade: '999,000' }));
+    expect(pouca.status).toBe(201);
+    expect(muita.status).toBe(201);
+    expect(muita.body.baseTributavel).toBe(pouca.body.baseTributavel);
+    expect(muita.body.icms).toBe(pouca.body.icms);
+  });
+
+  it('simular não abre socket HTTP', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    fetchSpy.mockClear();
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('simular grava 1 auditoria e explicar não grava outra', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    const antes = await db().execute(sql`SELECT COUNT(*)::int AS n FROM auditoria WHERE tabela = 'simulacoes_fiscais' AND registro_id = ${res.body.id}::uuid`);
+    expect(antes.rows[0]).toMatchObject({ n: 1 });
+    const explicacao = await explicar(admin, res.body.id);
+    expect(explicacao.status).toBe(200);
+    const depois = await db().execute(sql`SELECT COUNT(*)::int AS n FROM auditoria WHERE tabela = 'simulacoes_fiscais' AND registro_id = ${res.body.id}::uuid`);
+    expect(depois.rows[0]).toMatchObject({ n: 1 });
+  });
+
+  it('histórico não tem nome de tabela nem uuid', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${res.body.id}/historico`).set('Cookie', admin);
+    expect(historico.status).toBe(200);
+    const texto = JSON.stringify(historico.body);
+    expect(texto).not.toContain('simulacoes_fiscais');
+    expect(texto).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+  });
+
+  it('busca pelo uuid da linha devolve total 0', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    const lista = await request(app.getHttpServer()).get('/fiscal/simulacoes').query({ search: res.body.id }).set('Cookie', admin);
+    expect(lista.status).toBe(200);
+    expect(lista.body.total).toBe(0);
+  });
+
+  it('POST não altera updated_at das tabelas vizinhas', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const antes = await marcas(aprovada);
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(201);
+    expect(await marcas(aprovada)).toEqual(antes);
+  });
+
+  async function marcas(aprovada: { regraId: string; base: Awaited<ReturnType<typeof cenario>> }) {
+    const ler = async (tabela: string, id: string) => {
+      const linha = await db().execute(sql`SELECT updated_at::text AS updated_at FROM ${sql.raw(tabela)} WHERE id = ${id}::uuid`);
+      return (linha.rows[0] as { updated_at: string } | undefined)?.updated_at ?? null;
+    };
+    return {
+      regra: await ler('regras_tributarias', aprovada.regraId),
+      enquadramento: await ler('enquadramentos_fiscais', aprovada.base.enquadramentoId),
+      cfop: await ler('cfops', aprovada.base.cfopId),
+      ncm: await ler('ncms', aprovada.base.ncmId),
+      empresa: await ler('empresas', aprovada.base.empresaId),
+      notas: (await db().execute(sql`SELECT COUNT(*)::int AS n FROM notas_fiscais`)).rows[0],
+    };
+  }
+
+  it('versão nova de outro enquadramento não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const outra = await aprovarRegra(await cenario());
+    const origem = await simular(admin, corpoDe(aprovada.base));
+    expect(origem.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .post(`/fiscal/simulacoes/${origem.body.id}/versoes`)
+      .set('Cookie', admin)
+      .send({ ...corpoDe(aprovada.base), enquadramentoId: outra.base.enquadramentoId, versao: origem.body.versao });
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('LINHAGEM_ENQUADRAMENTO_FIXO');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE codigo = ${origem.body.codigo} AND numero_versao = 2`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('competência 2027-01 na versão nova não grava a versão 2', async () => {
+    const aprovada = await aprovarRegra(await cenario({ fim: '2027-12-31' }));
+    const origem = await simular(admin, corpoDe(aprovada.base));
+    expect(origem.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .post(`/fiscal/simulacoes/${origem.body.id}/versoes`)
+      .set('Cookie', admin)
+      .send({ ...corpoDe(aprovada.base), competencia: '2027-01', versao: origem.body.versao });
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('FALTA_REFERENCIA_LEGAL');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE codigo = ${origem.body.codigo} AND numero_versao = 2`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('CSV da memória traz ICMS 70,00 e a frase do IPI sem 0,00', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const memoria = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/memoria`).set('Cookie', admin);
+    expect(memoria.status).toBe(200);
+    expect(memoria.headers['content-type']).toContain('text/csv');
+    const csv = memoria.text;
+    expect(csv.startsWith('\uFEFFCampo;Valor')).toBe(true);
+    expect(csv).toContain('ICMS;70,00');
+    const linhaIpi = csv.split(/\r\n/).find((linha) => linha.startsWith('Tratamento IPI;'));
+    expect(linhaIpi).toContain('Esta regra não guarda alíquota deste tributo; nenhum valor é calculado.');
+    expect(linhaIpi).not.toContain('0,00');
+  });
+
+  it('CSV da grade usa o nome fantasia', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const grade = await request(app.getHttpServer()).get('/fiscal/simulacoes/exportacao').set('Cookie', admin);
+    expect(grade.status).toBe(200);
+    expect(grade.text.startsWith('\uFEFFCliente;Produto;Valor;Valor líquido (calculado);Estabelecimento;Operação')).toBe(true);
+    expect(grade.text).toContain('Açougue Central');
+  });
+
+  it('contagens separam códigos, versões e base diferente', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const res = await request(app.getHttpServer()).get('/fiscal/simulacoes/contagens').set('Cookie', admin);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ simulacoes: 1, versoes: 1, baseDiferente: 1 });
+  });
+
+  it('pré-condições mantêm dupla aprovação, três datas e perfis como provisórios', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const res = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/pre-condicoes`).set('Cookie', admin);
+    expect(res.status).toBe(200);
+    const por = Object.fromEntries((res.body as Array<{ codigo: string }>).map((item) => [item.codigo, item]));
+    expect(Object.keys(por)).toEqual([
+      'ENQUADRAMENTO_ATIVO',
+      'REGRA_APROVADA_VIGENTE',
+      'MEMORIA_SEM_DOCUMENTO',
+      'DATAS_COMERCIAL_FISCAL_EFETIVA',
+      'DUPLA_APROVACAO',
+      'PERFIS_ALEM_ADMINISTRADOR',
+    ]);
+    expect(por.ENQUADRAMENTO_ATIVO).toMatchObject({ atendida: true, provisoria: false });
+    expect(por.REGRA_APROVADA_VIGENTE).toMatchObject({ atendida: true, provisoria: false });
+    expect(por.MEMORIA_SEM_DOCUMENTO).toMatchObject({ atendida: true, provisoria: false });
+    expect(por.DATAS_COMERCIAL_FISCAL_EFETIVA).toMatchObject({ atendida: false, provisoria: true });
+    expect(por.DUPLA_APROVACAO).toMatchObject({
+      atendida: false,
+      provisoria: true,
+      texto: 'Esta tela não aprova nem publica regra. O quórum numérico permanece provisório.',
+    });
+    expect(por.PERFIS_ALEM_ADMINISTRADOR).toMatchObject({ atendida: false, provisoria: true });
+  });
+
+  it('histórico usa os resumos da simulação e da versão nova', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const origem = await simular(admin, corpoDe(aprovada.base));
+    expect(origem.status).toBe(201);
+    const versao = await request(app.getHttpServer())
+      .post(`/fiscal/simulacoes/${origem.body.id}/versoes`)
+      .set('Cookie', admin)
+      .send({ ...corpoDe(aprovada.base), desconto: '100,00', versao: origem.body.versao });
+    expect(versao.status).toBe(201);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${versao.body.id}/historico`).set('Cookie', admin);
+    expect(historico.status).toBe(200);
+    const resumos = (historico.body as Array<{ resumo: string }>).map((item) => item.resumo);
+    expect(resumos).toContain('Simulação calculada');
+    expect(resumos).toContain(`Versão nova do código ${origem.body.codigo}`);
+  });
+
+  it('consulta a regra gravada', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const [regra] = await db().select({ pIcms: schema.regrasTributarias.pIcms }).from(schema.regrasTributarias).where(eq(schema.regrasTributarias.id, aprovada.regraId));
+    expect(regra?.pIcms).toBe('0.1200');
+  });
+
+  it('lista com filtros, busca e as duas direções', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const filtros = {
+      search: 'Açougue',
+      estabelecimentoId: aprovada.base.estabelecimentoId,
+      clienteId: aprovada.base.clienteId,
+      produtoId: aprovada.base.produtoId,
+      competencia: '2026-10',
+      sort: 'produto',
+    };
+    const ascendente = await request(app.getHttpServer()).get('/fiscal/simulacoes').query({ ...filtros, dir: 'asc' }).set('Cookie', admin);
+    const descendente = await request(app.getHttpServer()).get('/fiscal/simulacoes').query({ ...filtros, dir: 'desc' }).set('Cookie', admin);
+    expect(ascendente.status).toBe(200);
+    expect(descendente.status).toBe(200);
+    expect(ascendente.body.total).toBeGreaterThan(0);
+    expect(descendente.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: criada.body.id })]));
+  });
+
+
+  it('lista expõe código, versão e situação e filtra por linhagem e por versão da regra', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const linhagem = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ codigo: criada.body.codigo, pageSize: 100 }).set('Cookie', admin);
+    expect(linhagem.status).toBe(200);
+    expect(linhagem.body.data).toHaveLength(1);
+    expect(linhagem.body.data[0]).toMatchObject({
+      id: criada.body.id,
+      codigo: criada.body.codigo,
+      numeroVersao: 1,
+      situacao: 'Calculada',
+      competenciaRotulo: 'Outubro de 2026',
+    });
+    const porRegra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ regraId: aprovada.regraId, pageSize: 100 }).set('Cookie', admin);
+    expect((porRegra.body.data as { id: string }[]).map((l) => l.id)).toEqual([criada.body.id]);
+    const porCodigo = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: criada.body.codigo, regraId: aprovada.regraId }).set('Cookie', admin);
+    expect((porCodigo.body.data as { id: string }[]).map((l) => l.id)).toContain(criada.body.id);
+    const outraRegra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ regraId: crypto.randomUUID() }).set('Cookie', admin);
+    expect(outraRegra.body.total).toBe(0);
+    const comNulo = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'a\u0000b' }).set('Cookie', admin);
+    expect(comNulo.status).toBe(400);
+    // % _ e \ da busca são literais ignorados, nunca curinga nem escape do LIKE.
+    const curinga = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'A_ougue', regraId: aprovada.regraId }).set('Cookie', admin);
+    expect(curinga.status).toBe(200);
+    expect(curinga.body.total).toBe(0);
+    const barra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'Açougue\\', regraId: aprovada.regraId }).set('Cookie', admin);
+    expect(barra.status).toBe(200);
+    expect((barra.body.data as { id: string }[]).map((l) => l.id)).toContain(criada.body.id);
+  });
+  it('competência anterior ao enquadramento não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario({ inicio: '2026-06-01' }));
+    const res = await simular(admin, corpoDe(aprovada.base, { competencia: '2026-01' }));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('ENQUADRAMENTO_INDISPONIVEL');
+  });
+
+  it('cadastros inativos ou apagados não gravam', async () => {
+    const casos: Array<{
+      tabela: string;
+      atribuicao: string;
+      campo: 'estabelecimentoId' | 'clienteId' | 'produtoId' | 'ncmId' | 'operacaoId';
+      codigo: string;
+    }> = [
+      { tabela: 'estabelecimentos', atribuicao: "situacao = 'SUSPENDED', justificativa_situacao = 'Suspenso para o teste.'", campo: 'estabelecimentoId', codigo: 'ESTABELECIMENTO_INDISPONIVEL' },
+      { tabela: 'clientes', atribuicao: "status = 'inativo'", campo: 'clienteId', codigo: 'CLIENTE_INDISPONIVEL' },
+      { tabela: 'produtos', atribuicao: "status = 'inativo'", campo: 'produtoId', codigo: 'PRODUTO_INDISPONIVEL' },
+      { tabela: 'ncms', atribuicao: 'deleted_at = now()', campo: 'ncmId', codigo: 'NCM_INDISPONIVEL' },
+      { tabela: 'operacoes', atribuicao: 'deleted_at = now()', campo: 'operacaoId', codigo: 'OPERACAO_INDISPONIVEL' },
+    ];
+    for (const caso of casos) {
+      const aprovada = await aprovarRegra(await cenario());
+      const id = aprovada.base[caso.campo];
+      await db().execute(sql`UPDATE ${sql.raw(caso.tabela)} SET ${sql.raw(caso.atribuicao)} WHERE id = ${id}::uuid`);
+      const res = await simular(admin, corpoDe(aprovada.base));
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe(caso.codigo);
+    }
+  });
+
+  it('duas regras aprovadas na mesma competência não gravam', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const codigo = `9${String(Date.now()).slice(-8)}`;
+    await db().execute(sql`
+      INSERT INTO regras_tributarias (
+        codigo, numero_versao, enquadramento_id, icms_cst, p_red_bc, p_icms,
+        beneficio_fiscal_id, ipi_cst, pis_cst, ibs_cst, classificacao_ibs_cbs_id,
+        vigencia_inicio, vigencia_fim, situacao, justificativa,
+        submetido_por_id, submetido_em, aprovado_por_id, aprovado_em,
+        criado_por_id, atualizado_por_id
+      )
+      SELECT
+        ${codigo}, numero_versao, enquadramento_id, icms_cst, p_red_bc, p_icms,
+        beneficio_fiscal_id, ipi_cst, pis_cst, ibs_cst, classificacao_ibs_cbs_id,
+        vigencia_inicio, vigencia_fim, situacao, justificativa,
+        submetido_por_id, submetido_em, aprovado_por_id, aprovado_em,
+        criado_por_id, atualizado_por_id
+      FROM regras_tributarias
+      WHERE id = ${aprovada.regraId}::uuid
+    `);
+    const res = await simular(admin, corpoDe(aprovada.base));
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('REFERENCIA_AMBIGUA');
+  });
+
+  it('histórico aceita auditoria sem resumo e com situação anterior', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    await db().execute(sql`
+      INSERT INTO auditoria (tabela, registro_id, operacao, dados_anteriores, dados_novos)
+      VALUES (
+        'simulacoes_fiscais',
+        ${criada.body.id}::uuid,
+        'INSERT',
+        '{"situacao":"Calculada"}'::jsonb,
+        '{"situacao":"Calculada"}'::jsonb
+      )
+    `);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/historico`).set('Cookie', admin);
+    expect(historico.status).toBe(200);
+    expect(historico.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ situacaoAnterior: 'Calculada', resumo: null, versao: null, numeroVersao: null }),
+    ]));
+  });
+
+  it('detalhe lê ICMS negativo gravado à parte', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    await db().execute(sql`UPDATE simulacoes_fiscais SET icms = -1.21 WHERE id = ${criada.body.id}::uuid`);
+    const detalhe = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}`).set('Cookie', admin);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.icms).toBe('-1.21');
+  });
+
+  it('identificador ausente responde 404 na leitura, na versão e na alteração', async () => {
+    const id = '00000000-0000-7000-8000-000000000099';
+    const leitura = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${id}`).set('Cookie', admin);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${id}/historico`).set('Cookie', admin);
+    const alteracao = await request(app.getHttpServer()).patch(`/fiscal/simulacoes/${id}`).set('Cookie', admin);
+    const versao = await request(app.getHttpServer()).post(`/fiscal/simulacoes/${id}/versoes`).set('Cookie', admin).send({
+      estabelecimentoId: id,
+      operacaoId: id,
+      clienteId: id,
+      produtoId: id,
+      ncmId: id,
+      quantidade: '10,000',
+      pesoNf: '982,000',
+      valor: '1.000,00',
+      desconto: '0,00',
+      competencia: '2026-10',
+      enquadramentoId: id,
+      justificativa: MOTIVO_SIM,
+      versao: 1,
+    });
+    expect(leitura.status).toBe(404);
+    expect(historico.status).toBe(404);
+    expect(alteracao.status).toBe(404);
+    expect(versao.status).toBe(404);
+  });
+
+  it('CSV da memória e da grade neutralizam fórmula vinda do cadastro', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const perigoso = "=cmd|' /C calc'!A0";
+    await db().execute(sql`UPDATE produtos SET nome = ${perigoso} WHERE id = ${aprovada.base.produtoId}::uuid`);
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const memoria = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/memoria`).set('Cookie', admin);
+    expect(memoria.text).toContain(`Produto;'${perigoso}`);
+    expect(memoria.text).not.toMatch(/(^|[\r\n;])=cmd/);
+    const grade = await request(app.getHttpServer()).get('/fiscal/simulacoes/exportacao').set('Cookie', admin);
+    expect(grade.text).toContain(`;'${perigoso};`);
+    expect(grade.text).not.toMatch(/(^|[\r\n;])=cmd/);
+  });
+
+  it('cadastro alterado em transação concorrente bloqueia a simulação até o commit', async () => {
+    const casos = [
+      { tabela: 'estabelecimentos', atribuicao: "situacao = 'SUSPENDED', justificativa_situacao = 'Suspenso para o teste.'", campo: 'estabelecimentoId', codigo: 'ESTABELECIMENTO_INDISPONIVEL' },
+      { tabela: 'clientes', atribuicao: "status = 'inativo'", campo: 'clienteId', codigo: 'CLIENTE_INDISPONIVEL' },
+      { tabela: 'produtos', atribuicao: "status = 'inativo'", campo: 'produtoId', codigo: 'PRODUTO_INDISPONIVEL' },
+      { tabela: 'ncms', atribuicao: 'deleted_at = now()', campo: 'ncmId', codigo: 'NCM_INDISPONIVEL' },
+      { tabela: 'operacoes', atribuicao: 'deleted_at = now()', campo: 'operacaoId', codigo: 'OPERACAO_INDISPONIVEL' },
+      { tabela: 'regras_tributarias', atribuicao: 'deleted_at = now()', campo: 'regraId', codigo: 'FALTA_REFERENCIA_LEGAL' },
+    ] as const;
+    for (const caso of casos) {
+      const aprovada = await aprovarRegra(await cenario());
+      const id = caso.campo === 'regraId' ? aprovada.regraId : aprovada.base[caso.campo];
+      let pendente: Promise<{ status: number; body: Parameters<typeof codigoDe>[0] }> | undefined;
+      let terminouAntes = false;
+      await db().transaction(async (tx) => {
+        await tx.execute(sql`UPDATE ${sql.raw(caso.tabela)} SET ${sql.raw(caso.atribuicao)} WHERE id = ${id}::uuid`);
+        pendente = simular(admin, corpoDe(aprovada.base)).then((r) => r);
+        pendente.then(() => { terminouAntes = true; }, () => { terminouAntes = true; });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
+      expect({ tabela: caso.tabela, terminouAntes }).toEqual({ tabela: caso.tabela, terminouAntes: false });
+      const res = await pendente!;
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe(caso.codigo);
+    }
+  });
+
+  it('listagem empata pelo identificador da simulação', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      ids.push(criada.body.id as string);
+    }
+    const lista = await request(app.getHttpServer()).get('/fiscal/simulacoes?sort=cliente&dir=asc&pageSize=10').set('Cookie', admin);
+    expect(lista.status).toBe(200);
+    const vistos = (lista.body.data as Array<{ id: string }>).map((i) => i.id);
+    expect(vistos).toEqual([...ids].sort());
+  });
+
+  describe('Portão A r1 do PR #166 — tratamento ICMS (AD-34), CSV da memória e auditoria', () => {
+    it.each(['40', '41'])('isenção não calcula ICMS: tratamento %s grava ICMS 0,00 e base igual ao líquido', async (icmsCst) => {
+      const aprovada = await aprovarRegra(await cenario(), { icmsCst, pRedBc: '0,00', pIcms: '0,00' });
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      expect(criada.body.icms).toBe('0.00');
+      expect(criada.body.baseTributavel).toBe('1000.00');
+      expect(criada.body.baseDifereBruto).toBe(false);
+    });
+
+    it.each([
+      ['40', 'TRATAMENTO_ICMS_INCOERENTE'],
+      ['41', 'TRATAMENTO_ICMS_INCOERENTE'],
+      ['51', 'TRATAMENTO_ICMS_PENDENTE'],
+    ])('isenção não calcula ICMS: regra %s incoerente no banco responde 422 e não grava', async (icmsCst, codigo) => {
+      const aprovada = await aprovarRegra(await cenario());
+      // Linha anterior à guarda do AD-34: tratamento trocado sem zerar redução e alíquota.
+      await db().execute(sql`UPDATE regras_tributarias SET icms_cst = ${icmsCst} WHERE id = ${aprovada.regraId}::uuid`);
+      const res = await simular(admin, corpoDe(aprovada.base));
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe(codigo);
+      const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE regra_id = ${aprovada.regraId}::uuid`);
+      expect(n.rows[0]).toMatchObject({ n: 0 });
+    });
+
+    it('CSV da memória traz o tratamento com a frase, a base diferente e a referência legal da explicação', async () => {
+      const aprovada = await aprovarRegra(await cenario());
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      const explicacao = await explicar(admin, criada.body.id);
+      const memoria = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/memoria`).set('Cookie', admin);
+      expect(memoria.status).toBe(200);
+      const linhas = memoria.text.split('\r\n');
+      expect(linhas[0]).toBe('\uFEFFCampo;Valor');
+      expect(linhas).toContain('Tratamento IPI;"Saída não tributada. Esta regra não guarda alíquota deste tributo; nenhum valor é calculado."');
+      expect(linhas).toContain(`Base tributável difere de valor bruto;${explicacao.body.textoBase}`);
+      expect(linhas[linhas.length - 1]).toBe(`Referência legal;${explicacao.body.referenciaLegal}`);
+      expect(memoria.text).toContain('Benefício fiscal: Benefício');
+      expect(memoria.text).toContain('Classificação IBS/CBS: Classificação');
+      expect(memoria.text).not.toMatch(/\n$/);
+    });
+
+    it('auditoria da simulação registra valores, regra e resultado', async () => {
+      const aprovada = await aprovarRegra(await cenario());
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      const linhas = await db().execute(sql`SELECT dados_novos FROM auditoria WHERE registro_id = ${criada.body.id}::uuid`);
+      expect(linhas.rows).toHaveLength(1);
+      expect((linhas.rows[0] as { dados_novos: unknown }).dados_novos).toMatchObject({
+        valor: '1000.00',
+        desconto: '0.00',
+        valorLiquido: '1000.00',
+        baseTributavel: '583.30',
+        icms: '70.00',
+        baseDifereBruto: true,
+        competencia: '2026-10',
+        regraId: aprovada.regraId,
+      });
+    });
+  });
+});

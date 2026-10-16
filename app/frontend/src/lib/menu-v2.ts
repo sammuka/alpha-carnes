@@ -97,6 +97,24 @@ export const MENU_V2: MenuGroupDef[] = [
         iconKey: 'Scale',
         permissao: 'FISCAL_ENQUADRAMENTOS_LER',
       },
+      {
+        href: '/fiscal/regras',
+        label: 'Editor de regras tributárias',
+        iconKey: 'FileSpreadsheet',
+        permissao: 'FISCAL_REGRAS_LER',
+      },
+      {
+        href: '/fiscal/simulador',
+        label: 'Simulador fiscal e memória de cálculo',
+        iconKey: 'PieChart',
+        permissao: 'FISCAL_SIMULACOES_LER',
+      },
+      {
+        href: '/fiscal/homologacao',
+        label: 'Painel de alterações e homologação de regras',
+        iconKey: 'ClipboardCheck',
+        permissao: 'FISCAL_HOMOLOGACOES_LER',
+      },
     ],
   },
   {

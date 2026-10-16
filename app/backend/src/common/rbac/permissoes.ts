@@ -103,6 +103,14 @@ export const PERMISSOES = {
   FISCAL_EMPRESAS_APROVAR: 'FISCAL_EMPRESAS_APROVAR',
   FISCAL_ENQUADRAMENTOS_LER: 'FISCAL_ENQUADRAMENTOS_LER',
   FISCAL_ENQUADRAMENTOS_GERENCIAR: 'FISCAL_ENQUADRAMENTOS_GERENCIAR',
+  FISCAL_REGRAS_LER: 'FISCAL_REGRAS_LER',
+  FISCAL_REGRAS_GERENCIAR: 'FISCAL_REGRAS_GERENCIAR',
+  FISCAL_REGRAS_APROVAR: 'FISCAL_REGRAS_APROVAR',
+  FISCAL_SIMULACOES_LER: 'FISCAL_SIMULACOES_LER',
+  FISCAL_SIMULACOES_GERENCIAR: 'FISCAL_SIMULACOES_GERENCIAR',
+  FISCAL_HOMOLOGACOES_LER: 'FISCAL_HOMOLOGACOES_LER',
+  FISCAL_HOMOLOGACOES_GERENCIAR: 'FISCAL_HOMOLOGACOES_GERENCIAR',
+  FISCAL_HOMOLOGACOES_APROVAR: 'FISCAL_HOMOLOGACOES_APROVAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -416,6 +424,17 @@ pushPermissoes('administrador', 'FISCAL_EMPRESAS_LER', 'FISCAL_EMPRESAS_GERENCIA
 // E01-T02 — operações fiscais e enquadramentos: só administrador (AD-04; AD-18 (5);
 // personas não viram perfis). Demais perfis = H-E01-12. Sem FISCAL_ENQUADRAMENTOS_APROVAR.
 pushPermissoes('administrador', 'FISCAL_ENQUADRAMENTOS_LER', 'FISCAL_ENQUADRAMENTOS_GERENCIAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona fiscal/contador não é perfil.
+pushPermissoes('administrador', 'FISCAL_REGRAS_LER', 'FISCAL_REGRAS_GERENCIAR', 'FISCAL_REGRAS_APROVAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona fiscal/contador não é perfil.
+pushPermissoes('administrador', 'FISCAL_SIMULACOES_LER', 'FISCAL_SIMULACOES_GERENCIAR');
+// AD-04 / AD-18 (5) / H-E01-12. Persona contador e auditor não é perfil.
+pushPermissoes(
+  'administrador',
+  'FISCAL_HOMOLOGACOES_LER',
+  'FISCAL_HOMOLOGACOES_GERENCIAR',
+  'FISCAL_HOMOLOGACOES_APROVAR',
+);
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -501,4 +520,12 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   FISCAL_ENQUADRAMENTOS_LER: 'Consultar operações fiscais, enquadramentos, CFOP e NCM manuais',
   FISCAL_ENQUADRAMENTOS_GERENCIAR:
     'Cadastrar, editar, duplicar, inativar, reativar e remover enquadramentos e códigos manuais de CFOP e NCM',
+  FISCAL_REGRAS_LER: 'Consultar regras tributárias, benefícios fiscais e classificações IBS/CBS manuais',
+  FISCAL_REGRAS_GERENCIAR: 'Criar rascunho, editar rascunho, adicionar versão, submeter e cadastrar benefício fiscal e classificação IBS/CBS',
+  FISCAL_REGRAS_APROVAR: 'Aprovar e aposentar versão de regra tributária submetida por outro usuário',
+  FISCAL_SIMULACOES_LER: 'Consultar simulações fiscais, memória de cálculo e comparação de versões',
+  FISCAL_SIMULACOES_GERENCIAR: 'Simular tributos e gravar versão nova da memória de cálculo',
+  FISCAL_HOMOLOGACOES_LER: 'Consultar o painel de alterações e homologação de regras',
+  FISCAL_HOMOLOGACOES_GERENCIAR: 'Abrir revisão de regra aprovada e vincular cenário de regressão',
+  FISCAL_HOMOLOGACOES_APROVAR: 'Aprovar, rejeitar e publicar homologação de regra submetida por outro usuário',
 };

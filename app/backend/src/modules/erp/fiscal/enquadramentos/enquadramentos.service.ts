@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -17,6 +17,7 @@ import {
   ncms,
   operacoes,
   produtos,
+  regrasTributarias,
   usuarios,
 } from '../../../../database/schema';
 import { EVENTOS, type AcaoEnquadramentoFiscal } from '../../../../realtime/events/eventos';
@@ -430,6 +431,7 @@ export class EnquadramentosService {
       if (anterior.situacao !== 'ATIVA') transicaoInvalida(anterior.situacao);
       exigirVersao(anterior.versao, dto.versao);
       await this.travarAprovado(tx, anterior.estabelecimentoId);
+      if (!mesmaChave(chaveDe(anterior), chaveDe(dto))) await this.exigirSemRegraVigente(tx, id);
       await this.exigirPreCondicoes(tx, dto);
       await this.garantirSemSobreposicao(
         tx, anterior.estabelecimentoId, chaveDe(dto), intervaloDe(dto.vigenciaInicio, dto.vigenciaFim), id,
@@ -489,6 +491,7 @@ export class EnquadramentosService {
       if (anterior.situacao !== 'ATIVA') transicaoInvalida(anterior.situacao);
       exigirVersao(anterior.versao, dto.versao);
       await this.travarAprovado(tx, anterior.estabelecimentoId);
+      await this.exigirSemRegraVigente(tx, id);
       const [atualizada] = await tx.update(enquadramentosFiscais).set({
         situacao: 'INATIVA',
         justificativaSituacao: dto.justificativa,
@@ -594,6 +597,7 @@ export class EnquadramentosService {
     const linha = await this.db.transaction(async (tx) => {
       const anterior = await this.obterBloqueado(tx, id);
       await this.travarAprovado(tx, anterior.estabelecimentoId);
+      await this.exigirSemRegraVigente(tx, id);
       const agora = new Date();
       const [removida] = await tx.update(enquadramentosFiscais).set({
         deletedAt: agora,
@@ -630,6 +634,27 @@ export class EnquadramentosService {
           )`
         : undefined,
     );
+  }
+
+  /**
+   * D9 (T03) + AD-33: regra SUBMETIDA ou APROVADA lê CFOP e operação por este enquadramento. Mudar a chave,
+   * inativar ou remover deixaria a regra imutável alterada ou órfã. Rascunho não bloqueia: submeter e aprovar
+   * exigem enquadramento ativo (422 ENQUADRAMENTO_INDISPONIVEL). Ordem única de locks: o enquadramento já está
+   * travado (FOR NO KEY UPDATE) e só então as regras, em FOR SHARE — a mesma ordem das ações de regra.
+   */
+  private async exigirSemRegraVigente(tx: Tx, enquadramentoId: string) {
+    const [regra] = await tx.select({ codigo: regrasTributarias.codigo }).from(regrasTributarias).where(and(
+      eq(regrasTributarias.enquadramentoId, enquadramentoId),
+      isNull(regrasTributarias.deletedAt),
+      inArray(regrasTributarias.situacao, ['SUBMETIDA', 'APROVADA']),
+    )).limit(1).for('share');
+    if (regra) {
+      conflito(
+        'ENQUADRAMENTO_COM_REGRA_ATIVA',
+        'Há regra submetida ou aprovada vinculada a este enquadramento. Aposente a regra aprovada (ou conclua a aprovação e aposente) antes de alterar.',
+        { regraCodigo: regra.codigo },
+      );
+    }
   }
 
   private async travarAprovado(tx: Tx, estabelecimentoId: string) {

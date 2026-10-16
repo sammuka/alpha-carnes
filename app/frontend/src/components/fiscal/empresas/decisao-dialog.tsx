@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -35,6 +35,13 @@ export interface DecisaoPendente {
   perigosa?: boolean;
   mensagemSucesso: string;
   executar: (justificativa: string, confirmarTroca: boolean) => Promise<unknown>;
+  /**
+   * Relê o registro após um 409 e devolve `true` se ele ainda existe. A tela passa a usar a versão
+   * nova na próxima confirmação; o texto digitado fica no diálogo.
+   */
+  recarregar?: () => Promise<boolean>;
+  /** Texto do aviso quando o servidor responde 404 (registro removido por outro usuário); o reenvio fica bloqueado. */
+  mensagemRemovido?: string;
 }
 
 interface DecisaoDialogProps {
@@ -66,6 +73,12 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   const [erro, setErro] = useState<string | null>(null);
   const [erroCampo, setErroCampo] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
+  /** Pedido em voo: o segundo clique não envia de novo. */
+  const emVoo = useRef(false);
+  const [conflito, setConflito] = useState(false);
+  const [removido, setRemovido] = useState(false);
+  const [recarregando, setRecarregando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [desafio, setDesafio] = useState<DesafioTroca | null>(null);
   const retornoFocoTroca = useRetornoFoco(desafio !== null);
 
@@ -74,10 +87,13 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setErro(null);
     setErroCampo(null);
     setDesafio(null);
+    setConflito(false);
+    setRemovido(false);
+    setAviso(null);
   }, [decisao]);
 
   const executar = async (confirmarTroca: boolean) => {
-    if (!decisao || processando) return;
+    if (!decisao || emVoo.current) return;
     const texto = normalizarJustificativa(justificativa);
     if (!justificativaValida(texto)) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
@@ -85,6 +101,9 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     }
     setErroCampo(null);
     setErro(null);
+    setAviso(null);
+    setConflito(false);
+    emVoo.current = true;
     setProcessando(true);
     try {
       await decisao.executar(texto, confirmarTroca);
@@ -93,6 +112,12 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       onConcluido();
       onFechar();
     } catch (falha) {
+      if ((falha as { status?: number }).status === 404 && decisao.mensagemRemovido) {
+        setDesafio(null);
+        setRemovido(true);
+        setErro(decisao.mensagemRemovido);
+        return;
+      }
       if (falha instanceof ErroFiscal && falha.codigo === 'TROCA_REGIME_CONFIRMACAO_NECESSARIA') {
         setDesafio({
           fimProposto: String(falha.dados.fimProposto ?? ''),
@@ -102,14 +127,33 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       }
       setDesafio(null);
       if (ehConflitoConcorrente(falha)) onConflito();
+      if ((falha as { codigo?: string | null }).codigo === 'CONFLITO_CONCORRENTE') setConflito(true);
       const conflito = falha instanceof ErroFiscal && falha.codigo === 'REGIME_SOBREPOSTO'
         ? descreverConflito(falha.dados)
         : null;
       setErro([mensagemDoErroFiscal(falha), conflito].filter(Boolean).join(' '));
     } finally {
+      emVoo.current = false;
       setProcessando(false);
     }
   };
+
+  async function recarregar() {
+    if (!decisao?.recarregar) return;
+    setRecarregando(true);
+    try {
+      const existe = await decisao.recarregar();
+      setConflito(false);
+      if (existe) {
+        setErro(null);
+        setAviso('Dados recarregados. Revise o que digitou e confirme de novo.');
+      } else {
+        setErro('O registro não está mais disponível.');
+      }
+    } finally {
+      setRecarregando(false);
+    }
+  }
 
   return (
     <>
@@ -139,6 +183,12 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
                 {erro}
               </p>
             )}
+            {aviso && <p role="status" className="text-xs text-muted-foreground">{aviso}</p>}
+            {conflito && decisao?.recarregar && (
+              <Button type="button" variant="secondary" size="sm" className="justify-self-start" loading={recarregando} onClick={() => void recarregar()}>
+                Recarregar dados
+              </Button>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onFechar} disabled={processando}>
@@ -148,6 +198,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
               type="button"
               variant={decisao?.perigosa ? 'destructive' : 'default'}
               loading={processando}
+              disabled={processando || removido}
               onClick={() => void executar(false)}
             >
               {decisao?.rotuloConfirmar}

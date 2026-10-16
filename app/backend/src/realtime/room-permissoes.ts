@@ -4,6 +4,9 @@ import { PERMISSOES, type Permissao } from '../common/rbac/permissoes';
 export const ROOMS_PROTEGIDAS: Readonly<Record<string, Permissao>> = {
   'fiscal-empresas': PERMISSOES.FISCAL_EMPRESAS_LER,
   'fiscal-enquadramentos': PERMISSOES.FISCAL_ENQUADRAMENTOS_LER,
+  'fiscal-regras': PERMISSOES.FISCAL_REGRAS_LER,
+  'fiscal-simulacoes': PERMISSOES.FISCAL_SIMULACOES_LER,
+  'fiscal-homologacoes': PERMISSOES.FISCAL_HOMOLOGACOES_LER,
 };
 
 /** Permissão exigida para assinar a room. Fora do mapa, permanece `DISPONIBILIDADE_LER`. */

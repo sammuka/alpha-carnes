@@ -13,7 +13,10 @@ import {
 
 interface Props {
   id: string;
-  tipo: TipoBusca;
+  /** Cadastro padrão das telas de enquadramento; as demais telas passam `buscar`. */
+  tipo?: TipoBusca;
+  /** Busca própria no servidor. Precisa ter identidade estável (função de módulo). */
+  buscar?: (termo: string) => Promise<ResultadoBusca>;
   value: string;
   /** Rótulo do item selecionado, exibido mesmo quando ele não está na página de resultados. */
   rotulo: string;
@@ -27,7 +30,7 @@ interface Props {
 const ATRASO_MS = 250;
 
 /** Combo pesquisável que consulta o cadastro no servidor a cada digitação (debounce) e descarta resposta obsoleta. */
-export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlaceholder, onChange, clearable, disabled }: Props) {
+export function ComboboxBusca({ id, tipo, buscar, value, rotulo, placeholder, searchPlaceholder, onChange, clearable, disabled }: Props) {
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState('');
   const [resultado, setResultado] = useState<ResultadoBusca | null>(null);
@@ -42,7 +45,7 @@ export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlac
     const espera = setTimeout(() => {
       setCarregando(true);
       setErro(null);
-      buscarOpcoes(tipo, termo)
+      (buscar ? buscar(termo) : buscarOpcoes(tipo as TipoBusca, termo))
         .then((r) => { if (atual()) setResultado(r); })
         .catch((falha: unknown) => {
           if (!atual()) return;
@@ -52,7 +55,7 @@ export function ComboboxBusca({ id, tipo, value, rotulo, placeholder, searchPlac
         .finally(() => { if (atual()) setCarregando(false); });
     }, termo ? ATRASO_MS : 0);
     return () => clearTimeout(espera);
-  }, [aberto, termo, tipo]);
+  }, [aberto, termo, tipo, buscar]);
 
   const opcoes = resultado?.opcoes ?? [];
   const itens = opcoes.map((o) => ({ id: o.id, label: o.rotulo }));
