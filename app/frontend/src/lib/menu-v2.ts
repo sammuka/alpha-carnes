@@ -91,6 +91,12 @@ export const MENU_V2: MenuGroupDef[] = [
         iconKey: 'Landmark',
         permissao: 'FISCAL_EMPRESAS_LER',
       },
+      {
+        href: '/fiscal/enquadramentos',
+        label: 'Operações fiscais e enquadramentos',
+        iconKey: 'Scale',
+        permissao: 'FISCAL_ENQUADRAMENTOS_LER',
+      },
     ],
   },
   {

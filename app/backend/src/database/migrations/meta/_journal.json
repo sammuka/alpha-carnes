@@ -316,6 +316,13 @@
       "when": 1791906266147,
       "tag": "0044_e01_t01_empresas_estabelecimentos",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792018593751,
+      "tag": "0045_e01_t02_enquadramentos",
+      "breakpoints": true
     }
   ]
 }

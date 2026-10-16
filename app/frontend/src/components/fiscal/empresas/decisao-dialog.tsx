@@ -24,6 +24,7 @@ import {
   type RegimeVigente,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 /** Descreve uma decisão que exige justificativa: submeter, aprovar, rejeitar, suspender, remover… */
 export interface DecisaoPendente {
@@ -76,8 +77,9 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   }, [decisao]);
 
   const executar = async (confirmarTroca: boolean) => {
-    if (!decisao) return;
-    if (justificativa.trim().length < 3) {
+    if (!decisao || processando) return;
+    const texto = normalizarJustificativa(justificativa);
+    if (!justificativaValida(texto)) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
     }
@@ -85,7 +87,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setErro(null);
     setProcessando(true);
     try {
-      await decisao.executar(justificativa.trim(), confirmarTroca);
+      await decisao.executar(texto, confirmarTroca);
       setDesafio(null);
       toast.success(decisao.mensagemSucesso);
       onConcluido();
@@ -155,7 +157,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       </Dialog>
 
       {/* Challenge 409: a troca de regime só segue com confirmação explícita. */}
-      <AlertDialog open={desafio !== null} onOpenChange={(aberto) => { if (!aberto) setDesafio(null); }}>
+      <AlertDialog open={desafio !== null} onOpenChange={(aberto) => { if (!aberto && !processando) setDesafio(null); }}>
         <AlertDialogContent onCloseAutoFocus={retornoFocoTroca}>
           <AlertDialogHeader>
             <AlertDialogTitle>Troca de regime tributário</AlertDialogTitle>
@@ -170,7 +172,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={processando}>Cancelar</AlertDialogCancel>
             <Button type="button" loading={processando} onClick={() => void executar(true)}>
               Encerrar e submeter
             </Button>

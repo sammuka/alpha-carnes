@@ -106,6 +106,15 @@ describe('DTOs Zod do cadastro fiscal (E01-T01)', () => {
         .toBe('12ABC34501DE35');
     });
 
+    it('IE/IM recusam nao-ASCII antes de normalizar (i sem ponto, sharp s, s longo)', () => {
+      for (const campo of ['inscricaoEstadual', 'inscricaoMunicipal'] as const) {
+        for (const valor of ['ı', 'ß', 'ſ', 'ABıC']) {
+          expect(createEstabelecimentoSchema.safeParse({ ...estabelecimentoValido, [campo]: valor }).success)
+            .toBe(false);
+        }
+      }
+    });
+
     it('IE/IM normalizados', () => {
       const r = createEstabelecimentoSchema.parse({
         ...estabelecimentoValido, inscricaoEstadual: '123.456.789.110', inscricaoMunicipal: 'ab-12/3',

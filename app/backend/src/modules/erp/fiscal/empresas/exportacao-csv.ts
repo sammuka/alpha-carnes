@@ -22,7 +22,7 @@ export interface LinhaExportacaoFiscal {
   empresa: string;
 }
 
-/** Máscara exibida na grade (12.ABC.345/0001-DE-35): o Excel trata como texto, sem perder zeros nem virar notação científica. */
+/** Máscara exibida na grade (12.ABC.345/0001-35): o Excel trata como texto, sem perder zeros nem virar notação científica. */
 export function mascararCnpj(cnpj: string): string {
   return cnpj.length === 14
     ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`

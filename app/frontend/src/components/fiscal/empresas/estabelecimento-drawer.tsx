@@ -35,6 +35,7 @@ import {
 } from './cnaes-editor';
 import { EmpresaDialog } from './empresa-dialog';
 import { useRetornoFoco } from './use-retorno-foco';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface EstabelecimentoDrawerProps {
   aberto: boolean;
@@ -115,7 +116,8 @@ export function EstabelecimentoDrawer({
   const sujo = aberto && instantaneo(empresaId, cnpj, dados, cnaes, justificativa) !== baseline.current;
 
   const tentarFechar = () => {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   };
 
@@ -136,7 +138,7 @@ export function EstabelecimentoDrawer({
     if (!dados.inscricaoEstadual.trim()) locais.inscricaoEstadual = 'Informe a inscrição estadual.';
     if (!dados.inscricaoMunicipal.trim()) locais.inscricaoMunicipal = 'Informe a inscrição municipal.';
     if (!dados.uf) locais.uf = 'Selecione o estado.';
-    if (justificativa.trim().length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     const cnaesInvalidos = validarCnaes(cnaes);
     setErros(locais);
     setErrosCnaes(cnaesInvalidos);
@@ -151,9 +153,10 @@ export function EstabelecimentoDrawer({
 
   const salvar = async (evento: React.FormEvent) => {
     evento.preventDefault();
+    if (salvando) return;
     setErroGeral(null);
     if (!validar()) return;
-    const motivo = justificativa.trim();
+    const motivo = normalizarJustificativa(justificativa);
     const listaCnaes = normalizarListaCnaes(cnaes);
     setSalvando(true);
     try {

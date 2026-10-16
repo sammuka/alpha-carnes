@@ -18,6 +18,7 @@ import {
   type RegimeVersao,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface RegimeDialogProps {
   aberto: boolean;
@@ -61,11 +62,12 @@ export function RegimeDialog({
 
   const salvar = async (evento: React.FormEvent) => {
     evento.preventDefault();
+    if (salvando) return;
     const locais: Record<string, string> = {};
     if (!crt) locais.crt = 'Selecione o regime tributário.';
     if (!inicio) locais.vigenciaInicio = 'Informe o início da vigência.';
     if (inicio && fim && fim < inicio) locais.vigenciaFim = 'Fim de vigência deve ser igual ou posterior ao início.';
-    if (justificativa.trim().length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     setErros(locais);
     setErroGeral(null);
     if (Object.keys(locais).length > 0 || !crt) return;
@@ -78,14 +80,14 @@ export function RegimeDialog({
           vigenciaInicio: inicio,
           ...(fim ? { vigenciaFim: fim } : {}),
           versao: regime.versao,
-          justificativa: justificativa.trim(),
+          justificativa: normalizarJustificativa(justificativa),
         });
       } else {
         await fiscalApi.criarRegime(estabelecimentoId, {
           crt,
           vigenciaInicio: inicio,
           ...(fim ? { vigenciaFim: fim } : {}),
-          justificativa: justificativa.trim(),
+          justificativa: normalizarJustificativa(justificativa),
         });
       }
       toast.success('Versão de regime salva como rascunho.');
@@ -101,7 +103,7 @@ export function RegimeDialog({
   };
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !salvando) onFechar(); }}>
       <DialogContent onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>{regime ? 'Editar versão de regime' : 'Nova versão de regime'}</DialogTitle>
@@ -148,7 +150,7 @@ export function RegimeDialog({
             </p>
           )}
           <DialogFooter className="px-0">
-            <Button type="button" variant="ghost" onClick={onFechar}>
+            <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>
               Cancelar
             </Button>
             <Button type="submit" loading={salvando}>

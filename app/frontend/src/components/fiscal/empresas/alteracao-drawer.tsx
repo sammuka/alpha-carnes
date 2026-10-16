@@ -28,6 +28,7 @@ import {
 } from './cnaes-editor';
 import { ConfirmarSaidaDialog } from './confirmar-saida-dialog';
 import { useRetornoFoco } from './use-retorno-foco';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface AlteracaoDrawerProps {
   aberto: boolean;
@@ -91,7 +92,8 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
   const sujo = aberto && instantaneo(dados, cnaes, justificativa) !== baseline.current;
 
   const tentarFechar = () => {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   };
 
@@ -101,7 +103,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
     if (!dados.inscricaoEstadual.trim()) locais.inscricaoEstadual = 'Informe a inscrição estadual.';
     if (!dados.inscricaoMunicipal.trim()) locais.inscricaoMunicipal = 'Informe a inscrição municipal.';
     if (!dados.uf) locais.uf = 'Selecione o estado.';
-    if (justificativa.trim().length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     const cnaesInvalidos = validarCnaes(cnaes);
     setErros(locais);
     setErrosCnaes(cnaesInvalidos);
@@ -110,7 +112,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
 
   /** Grava a proposta (POST ou PATCH) e devolve a versão corrente dela. */
   const gravar = async (): Promise<AlteracaoAberta> => {
-    const motivo = justificativa.trim();
+    const motivo = normalizarJustificativa(justificativa);
     const lista = normalizarListaCnaes(cnaes);
     if (proposta) {
       return fiscalApi.atualizarAlteracao(estabelecimento.id, proposta.id, {
@@ -129,6 +131,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
   };
 
   const salvar = async (submeter: boolean) => {
+    if (salvando) return;
     setErroGeral(null);
     if (!validar()) return;
     const igualAoAprovado =
@@ -144,7 +147,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
       if (submeter) {
         await fiscalApi.acaoAlteracao(estabelecimento.id, salva.id, 'submeter', {
           versao: salva.versao,
-          justificativa: justificativa.trim(),
+          justificativa: normalizarJustificativa(justificativa),
         });
         toast.success('Alteração enviada para revisão.');
       } else {

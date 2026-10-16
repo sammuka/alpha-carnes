@@ -6,7 +6,7 @@ import { SecaoRotulo } from './aba-ficha';
  * Texto do catálogo da tela (regras, exceções, campos e ações do cadastro fiscal), sem códigos internos.
  */
 
-function Regra({ children, erro }: { children: React.ReactNode; erro?: boolean }) {
+export function Regra({ children, erro }: { children: React.ReactNode; erro?: boolean }) {
   return (
     <div
       className={`my-2 border-l-[3px] bg-surface-2 px-3 py-2.5 text-xs leading-relaxed ${erro ? 'border-destructive' : 'border-primary'}`}
@@ -16,7 +16,7 @@ function Regra({ children, erro }: { children: React.ReactNode; erro?: boolean }
   );
 }
 
-function Aviso({ children, alerta }: { children: React.ReactNode; alerta?: boolean }) {
+export function Aviso({ children, alerta }: { children: React.ReactNode; alerta?: boolean }) {
   return (
     <p className={`my-2.5 rounded-md p-2.5 text-[11px] ${alerta ? 'bg-warning-soft text-warning-fg' : 'bg-info-soft text-info-fg'}`}>
       {children}
@@ -61,11 +61,11 @@ const EXCECOES: Array<{ titulo: string; nota?: string }> = [
   },
 ];
 
-export function AbaExcecoes() {
+export function AbaExcecoes({ itens = EXCECOES, children }: { itens?: Array<{ titulo: string; nota?: string }>; children?: React.ReactNode }) {
   return (
     <div>
       <SecaoRotulo>Catálogo de erros e respostas da interface</SecaoRotulo>
-      {EXCECOES.map((e) => (
+      {itens.map((e) => (
         <Regra key={e.titulo} erro>
           <b>Bloqueio / exceção:</b> {e.titulo}.
           <br />
@@ -80,6 +80,7 @@ export function AbaExcecoes() {
           )}
         </Regra>
       ))}
+      {children}
     </div>
   );
 }
@@ -132,7 +133,7 @@ const REFERENCIA: Array<[string, string]> = [
   ['Exceções', 'CNPJ rejeitado; troca de regime; competência bloqueada'],
 ];
 
-export function AbaAceite() {
+export function AbaAceite({ referencia = REFERENCIA }: { referencia?: Array<[string, string]> }) {
   return (
     <div>
       <SecaoRotulo>Matriz de homologação funcional e técnica</SecaoRotulo>
@@ -142,7 +143,7 @@ export function AbaAceite() {
         ))}
       </ul>
       <SecaoRotulo>Referência do requisito</SecaoRotulo>
-      {REFERENCIA.map(([titulo, texto]) => (
+      {referencia.map(([titulo, texto]) => (
         <Regra key={titulo}>
           <strong>{titulo}</strong>
           <br />

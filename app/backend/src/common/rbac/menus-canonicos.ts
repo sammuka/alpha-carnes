@@ -45,7 +45,7 @@ export const MENUS_OPERACIONAIS = [
 ] as const;
 
 /** Rotas do ERP integrado (AD-24 (1)): grupo FISCAL, posição 08 da ADR-ERP-024. */
-export const MENUS_ERP = ['/fiscal/empresas'] as const;
+export const MENUS_ERP = ['/fiscal/empresas', '/fiscal/enquadramentos'] as const;
 
 export const MENUS_CANONICOS = [...MENUS_OPERACIONAIS, ...MENUS_ERP] as const;
 
@@ -60,7 +60,7 @@ export function menusDesconhecidos(hrefs: string[]): string[] {
 /**
  * Menus visíveis por perfil — transcrição da coluna "Perfis RBAC" da matriz de
  * rastreabilidade v1.1 (linhas 3–41), invertida de rota→perfis para perfil→rotas.
- * Total: 126 pares da matriz v1.1 + 1 ERP perfil×rota. Alterar aqui exige alterar a matriz (decisão 7).
+ * Total: 126 pares da matriz v1.1 + 2 rotas ERP no administrador. Alterar aqui exige alterar a matriz (decisão 7).
  */
 export const MENUS_VISIVEIS_POR_PERFIL: Record<string, string[]> = {
   administrador: [...MENUS_CANONICOS],

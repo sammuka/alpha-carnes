@@ -31,6 +31,7 @@
     "/faturamento/pre-faturamento",
     "/faturamento/seguro-manual",
     "/fiscal/empresas",
+    "/fiscal/enquadramentos",
     "/gestao/aprovacoes",
     "/gestao/compras",
     "/gestao/dashboard",
