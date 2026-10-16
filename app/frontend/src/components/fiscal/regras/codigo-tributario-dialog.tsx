@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { errosPorCampo } from '@/lib/fiscal-comum-ui';
+import { ErroRegra } from '@/lib/fiscal-regras';
+import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
 
 interface Props {
@@ -19,15 +22,41 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
   const [codigo, setCodigo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [erros, setErros] = useState<Record<string, string>>({});
   const [erro, setErro] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
     setCodigo('');
     setDescricao('');
     setMotivo('');
+    setErros({});
     setErro(null);
   }, [aberto, tipo]);
+
+  function limpar(chave: string) {
+    setErros(({ [chave]: _removido, ...resto }) => resto);
+  }
+
+  async function confirmar() {
+    const locais: Record<string, string> = {};
+    if (!codigo.trim()) locais.codigo = 'Informe o código.';
+    if (!descricao.trim()) locais.descricao = 'Informe a descrição.';
+    if (motivo.trim().length < 3) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
+    setErros(locais);
+    if (Object.keys(locais).length > 0) return;
+    setSalvando(true);
+    setErro(null);
+    try {
+      await onConfirmar({ codigo: codigo.trim(), descricao: descricao.trim(), justificativa: motivo.trim() });
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
+      if (falha instanceof ErroRegra) setErros(errosPorCampo(falha.porCampo));
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
@@ -36,27 +65,27 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
           <DialogTitle>{tipo === 'classificacao' ? 'Classificação IBS/CBS' : 'Benefício fiscal'}</DialogTitle>
         </DialogHeader>
         <form
+          noValidate
           className="grid gap-3 px-4 pb-4"
           onSubmit={(evento) => {
             evento.preventDefault();
-            void onConfirmar({ codigo: codigo.trim(), descricao: descricao.trim(), justificativa: motivo.trim() })
-              .catch((falha: unknown) => setErro(falha instanceof Error ? falha.message : 'Falha na operação.'));
+            void confirmar();
           }}
         >
           <p className="text-xs text-muted-foreground">{AVISO}</p>
-          <label className="grid gap-1 text-xs">Código
-            <input aria-label="Código do cadastro manual" className="h-8 rounded-md border px-2" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs">Descrição
-            <input aria-label="Descrição do cadastro manual" className="h-8 rounded-md border px-2" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs">Motivo
-            <textarea aria-label="Motivo do cadastro manual" className="min-h-16 rounded-md border px-2" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-          </label>
+          <CampoForm rotulo="Código" erro={erros.codigo}>
+            <input aria-label="Código do cadastro manual" className="h-8 rounded-md border px-2" value={codigo} onChange={(e) => { setCodigo(e.target.value); limpar('codigo'); }} />
+          </CampoForm>
+          <CampoForm rotulo="Descrição" erro={erros.descricao}>
+            <input aria-label="Descrição do cadastro manual" className="h-8 rounded-md border px-2" value={descricao} onChange={(e) => { setDescricao(e.target.value); limpar('descricao'); }} />
+          </CampoForm>
+          <CampoForm rotulo="Motivo" erro={erros.justificativa}>
+            <textarea aria-label="Motivo do cadastro manual" maxLength={500} className="min-h-16 rounded-md border px-2" value={motivo} onChange={(e) => { setMotivo(e.target.value); limpar('justificativa'); }} />
+          </CampoForm>
           {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
-            <Button type="submit">Salvar rascunho</Button>
+            <Button type="button" variant="secondary" onClick={onFechar} disabled={salvando}>Cancelar</Button>
+            <Button type="submit" loading={salvando}>Salvar rascunho</Button>
           </div>
         </form>
       </DialogContent>

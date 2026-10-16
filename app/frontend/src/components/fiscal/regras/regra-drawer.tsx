@@ -1,37 +1,56 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { errosPorCampo } from '@/lib/fiscal-comum-ui';
+import { mascararCfop, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   ROTULOS_IBS,
   ROTULOS_ICMS,
   ROTULOS_IPI,
   ROTULOS_PIS,
-  TEXTO_VAZIO_COMBO,
+  ErroRegra,
+  buscarBeneficios,
+  buscarClassificacoes,
+  buscarEnquadramentos,
   formatarPercentualPtBr,
+  mensagemDeRegra,
+  normalizarPercentual,
+  regrasApi,
   type CorpoRegra,
   type DetalheRegra,
-  type OpcaoCombo,
 } from '@/lib/fiscal-regras';
+import { ComboboxBusca } from '../enquadramentos/combobox-busca';
+import { CampoForm } from '../comum/campo-form';
+import { ConfirmarSaidaDialog } from '../empresas/confirmar-saida-dialog';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
+
+export interface SelecaoCodigoTributario {
+  tipo: 'beneficio' | 'classificacao';
+  id: string;
+  rotulo: string;
+}
+
+export interface FalhaSalvar {
+  mensagem: string;
+  porCampo: Record<string, string>;
+}
 
 interface Props {
   aberto: boolean;
-  enquadramentos: OpcaoCombo[];
-  beneficios: OpcaoCombo[];
-  classificacoes: OpcaoCombo[];
-  operacoes?: OpcaoCombo[];
-  cfops?: OpcaoCombo[];
-  detalhe?: DetalheRegra | null;
-  erro?: string | null;
-  errosCampo?: Record<string, string>;
-  onFechar?: () => void;
-  onSalvar?: (corpo: CorpoRegra) => Promise<string | null>;
-  onNovoCodigo?: (tipo: 'beneficio' | 'classificacao') => void;
-  onEnquadramento?: (id: string) => void;
+  /** Versão em edição; `null` abre o formulário de um registro novo. */
+  detalhe: DetalheRegra | null;
+  selecaoCodigo?: SelecaoCodigoTributario | null;
+  onFechar: () => void;
+  /** Devolve `null` quando gravou; senão a falha que o formulário exibe. */
+  onSalvar: (corpo: CorpoRegra) => Promise<FalhaSalvar | null>;
+  onNovoCodigo: (tipo: 'beneficio' | 'classificacao') => void;
 }
+
+type ChaveCombo = 'enquadramentoId' | 'operacaoId' | 'cfopId' | 'beneficioFiscalId' | 'classificacaoIbsCbsId';
+type Rotulos = Record<ChaveCombo, string>;
+const ROTULOS_VAZIOS: Rotulos = { enquadramentoId: '', operacaoId: '', cfopId: '', beneficioFiscalId: '', classificacaoIbsCbsId: '' };
 
 const VAZIO: CorpoRegra = {
   enquadramentoId: '',
@@ -66,184 +85,257 @@ function deDetalhe(detalhe: DetalheRegra): CorpoRegra {
     vigenciaInicio: detalhe.vigenciaInicio,
     vigenciaFim: detalhe.vigenciaFim ?? '',
     justificativa: '',
-    versao: detalhe.versao,
   };
 }
 
-export function RegraDrawer({
-  aberto, enquadramentos, beneficios, classificacoes, operacoes = [], cfops = [],
-  detalhe, erro, errosCampo = {}, onFechar = () => undefined, onSalvar, onNovoCodigo, onEnquadramento,
-}: Props) {
+function rotulosDe(detalhe: DetalheRegra): Rotulos {
+  return {
+    enquadramentoId: `${detalhe.enquadramentoCodigo} · ${detalhe.operacaoRotulo}`,
+    operacaoId: detalhe.operacaoRotulo,
+    cfopId: mascararCfop(detalhe.cfopCodigo),
+    beneficioFiscalId: detalhe.beneficioDescricao,
+    classificacaoIbsCbsId: detalhe.classificacaoDescricao,
+  };
+}
+
+const PERCENTUAL_INVALIDO = 'Informe um percentual de 0,00 a 100,00.';
+
+/** Validação local dos obrigatórios e dos formatos, antes de chamar o servidor. */
+function validar(form: CorpoRegra): Record<string, string> {
+  const erros: Record<string, string> = {};
+  if (!form.enquadramentoId) erros.enquadramentoId = 'Selecione o enquadramento fiscal.';
+  if (!form.operacaoId) erros.operacaoId = 'Selecione a operação.';
+  if (!form.cfopId) erros.cfopId = 'Selecione a operação fiscal (CFOP).';
+  if (!form.beneficioFiscalId) erros.beneficioFiscalId = 'Selecione o benefício fiscal.';
+  if (!form.classificacaoIbsCbsId) erros.classificacaoIbsCbsId = 'Selecione a classificação IBS/CBS.';
+  if (normalizarPercentual(form.pRedBc) === null) erros.pRedBc = PERCENTUAL_INVALIDO;
+  if (normalizarPercentual(form.pIcms) === null) erros.pIcms = PERCENTUAL_INVALIDO;
+  if (!form.vigenciaInicio) erros.vigenciaInicio = 'Informe o início de vigência.';
+  if (form.vigenciaFim && form.vigenciaInicio && form.vigenciaFim < form.vigenciaInicio) {
+    erros.vigenciaFim = 'Fim de vigência deve ser igual ou posterior ao início.';
+  }
+  if (form.justificativa.trim().length < 3) erros.justificativa = 'Informe a justificativa (3 a 500 caracteres).';
+  return erros;
+}
+
+export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar, onNovoCodigo }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
     const alvo = event.target;
     if (!(alvo instanceof Element)) return;
-    if (alvo.closest('[data-slot="dialog-content"], [data-slot="dialog-overlay"]')) event.preventDefault();
+    if (alvo.closest('[data-slot="dialog-content"], [data-slot="dialog-overlay"], [data-slot="alert-dialog-content"], [data-slot="alert-dialog-overlay"]')) {
+      event.preventDefault();
+    }
   };
   const [form, setForm] = useState<CorpoRegra>(VAZIO);
-  const [avisos, setAvisos] = useState<string | null>(null);
+  const [rotulos, setRotulos] = useState<Rotulos>(ROTULOS_VAZIOS);
+  const [errosLocais, setErrosLocais] = useState<Record<string, string>>({});
+  const [errosServidor, setErrosServidor] = useState<Record<string, string>>({});
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [verificado, setVerificado] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [preenchendo, setPreenchendo] = useState(false);
   const [sujo, setSujo] = useState(false);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
     setForm(detalhe ? deDetalhe(detalhe) : VAZIO);
-    setAvisos(null);
+    setRotulos(detalhe ? rotulosDe(detalhe) : ROTULOS_VAZIOS);
+    setErrosLocais({});
+    setErrosServidor({});
+    setAviso(null);
+    setVerificado(false);
+    setErroSalvar(null);
     setSujo(false);
-  }, [aberto, detalhe]);
+    setConfirmarSaida(false);
+    // Recarga da ficha com o drawer aberto (evento em tempo real) não pode apagar o que o usuário digitou.
+  }, [aberto, detalhe?.id]);
+
+  useEffect(() => {
+    if (!aberto || !selecaoCodigo) return;
+    const chave: ChaveCombo = selecaoCodigo.tipo === 'beneficio' ? 'beneficioFiscalId' : 'classificacaoIbsCbsId';
+    setForm((atual) => ({ ...atual, [chave]: selecaoCodigo.id }));
+    setRotulos((atual) => ({ ...atual, [chave]: selecaoCodigo.rotulo }));
+    setSujo(true);
+  }, [aberto, selecaoCodigo]);
+
+  function limparErro(chave: string) {
+    setErrosLocais(({ [chave]: _l, ...resto }) => resto);
+    setErrosServidor(({ [chave]: _s, ...resto }) => resto);
+    setVerificado(false);
+  }
 
   function set<K extends keyof CorpoRegra>(chave: K, valor: CorpoRegra[K]) {
     setSujo(true);
+    limparErro(chave);
     setForm((atual) => ({ ...atual, [chave]: valor }));
   }
 
-  async function escolherEnquadramento(id: string) {
-    setSujo(true);
-    setForm((atual) => ({ ...atual, enquadramentoId: id }));
-    onEnquadramento?.(id);
-    if (!id) return;
+  function escolher(chave: ChaveCombo, opcao: OpcaoCombo | null) {
+    set(chave, opcao?.id ?? '');
+    setRotulos((atual) => ({ ...atual, [chave]: opcao?.rotulo ?? '' }));
+  }
+
+  /** Ao escolher o enquadramento, Operação e CFOP assumem os valores dele e continuam visíveis. */
+  async function escolherEnquadramento(opcao: OpcaoCombo | null) {
+    escolher('enquadramentoId', opcao);
+    if (!opcao) return;
+    setPreenchendo(true);
+    setAviso(null);
     try {
-      const res = await fetch(`/api/erp/fiscal/enquadramentos/${id}`);
-      if (!res.ok) return;
-      const detalheEnq = await res.json() as { operacaoId?: string; cfopId?: string };
-      setForm((atual) => (
-        atual.enquadramentoId === id
-          ? { ...atual, operacaoId: detalheEnq.operacaoId ?? '', cfopId: detalheEnq.cfopId ?? '' }
-          : atual
-      ));
-    } catch {
-      // o servidor recusa a divergência no POST
+      const ref = await regrasApi.enquadramento(opcao.id);
+      setForm((atual) => (atual.enquadramentoId === opcao.id ? { ...atual, operacaoId: ref.operacaoId, cfopId: ref.cfopId } : atual));
+      setRotulos((atual) => ({ ...atual, operacaoId: ref.operacaoRotulo, cfopId: mascararCfop(ref.cfopCodigo) }));
+      setErrosLocais(({ operacaoId: _o, cfopId: _c, ...resto }) => resto);
+    } catch (falha) {
+      setAviso(`Não foi possível carregar a operação e o CFOP do enquadramento. ${falha instanceof Error ? falha.message : ''}`.trim());
+    } finally {
+      setPreenchendo(false);
     }
   }
 
-  function verificar(): string | null {
-    if (form.justificativa.trim().length < 3) return 'Informe a justificativa auditável (3 a 500 caracteres).';
-    if (!form.vigenciaInicio) return 'Informe o início de vigência.';
-    if (form.vigenciaFim && form.vigenciaFim < form.vigenciaInicio) return 'Fim de vigência deve ser igual ou posterior ao início.';
-    return null;
+  function verificar() {
+    const erros = validar(form);
+    setErrosLocais(erros);
+    setErroSalvar(null);
+    if (Object.keys(erros).length > 0) {
+      setVerificado(false);
+      setAviso('Corrija os campos destacados.');
+      return false;
+    }
+    setAviso(null);
+    setVerificado(true);
+    return true;
   }
 
   async function salvar() {
-    const local = verificar();
-    if (local) {
-      setAvisos(local);
-      return;
+    if (!verificar()) return;
+    setVerificado(false);
+    setSalvando(true);
+    try {
+      const falha = await onSalvar({
+        ...form,
+        justificativa: form.justificativa.trim(),
+        vigenciaFim: form.vigenciaFim || null,
+      });
+      if (falha) {
+        setErroSalvar(falha.mensagem);
+        setErrosServidor(errosPorCampo(falha.porCampo));
+      }
+    } catch (erro) {
+      setErroSalvar(erro instanceof ErroRegra ? mensagemDeRegra(erro) : 'Falha na operação.');
+    } finally {
+      setSalvando(false);
     }
-    const mensagem = await onSalvar?.({
-      ...form,
-      justificativa: form.justificativa.trim(),
-      vigenciaFim: form.vigenciaFim || null,
-      versao: detalhe?.versao,
-    });
-    if (mensagem) setAvisos(mensagem);
   }
 
-  function fechar() {
-    if (sujo && !window.confirm('Há alterações não salvas. Deseja sair?')) return;
-    onFechar();
+  function tentarFechar() {
+    if (sujo && !salvando) setConfirmarSaida(true);
+    else onFechar();
   }
+
+  const erroDe = (chave: string) => errosLocais[chave] ?? errosServidor[chave];
 
   return (
-    <Sheet open={aberto} onOpenChange={(open) => { if (!open) fechar(); }}>
-      <SheetContent
-        aria-describedby={undefined}
-        onCloseAutoFocus={retornoFoco}
-        onPointerDownOutside={manterDialogoAninhado}
-        onFocusOutside={manterDialogoAninhado}
-        onInteractOutside={manterDialogoAninhado}
-        className="w-full overflow-y-auto sm:max-w-xl"
-      >
-        <SheetHeader>
-          <SheetTitle>{detalhe ? 'Editar versão' : 'Novo registro'}</SheetTitle>
-        </SheetHeader>
-        <div className="grid gap-3 px-4">
-          <Campo rotulo="Enquadramento fiscal">
-            <select aria-label="Enquadramento fiscal" className="h-8 w-full rounded-md border px-2" value={form.enquadramentoId} onChange={(e) => { void escolherEnquadramento(e.target.value); }}>
-              <option value="">{enquadramentos.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
-              {enquadramentos.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
-            </select>
-          </Campo>
-          <Campo rotulo="Operação">
-            <select aria-label="Operação" className="h-8 w-full rounded-md border px-2" value={form.operacaoId} onChange={(e) => set('operacaoId', e.target.value)}>
-              <option value="">{operacoes.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
-              {operacoes.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
-            </select>
-          </Campo>
-          <Campo rotulo="Operação fiscal (CFOP)">
-            <select aria-label="Operação fiscal (CFOP)" className="h-8 w-full rounded-md border px-2" value={form.cfopId} onChange={(e) => set('cfopId', e.target.value)}>
-              <option value="">{cfops.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
-              {cfops.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
-            </select>
-          </Campo>
-          <CampoSelect rotulo="Tratamento ICMS" valor={form.icmsCst} opcoes={ROTULOS_ICMS} onChange={(valor) => set('icmsCst', valor)} />
-          <Campo rotulo="Redução de base do ICMS (%)">
-            <span className="inline-flex items-center gap-1">
-              <span aria-hidden="true">%</span>
-              <input aria-label="Redução de base do ICMS (%)" inputMode="decimal" className="h-8 w-full rounded-md border px-2" value={form.pRedBc} onChange={(e) => set('pRedBc', e.target.value)} />
-            </span>
-            {errosCampo.pRedBc && <span className="text-destructive">{errosCampo.pRedBc}</span>}
-          </Campo>
-          <Campo rotulo="Alíquota (%)">
-            <span className="inline-flex items-center gap-1">
-              <span aria-hidden="true">%</span>
-              <input aria-label="Alíquota (%)" inputMode="decimal" className="h-8 w-full rounded-md border px-2" value={form.pIcms} onChange={(e) => set('pIcms', e.target.value)} />
-            </span>
-            {errosCampo.pIcms && <span className="text-destructive">{errosCampo.pIcms}</span>}
-          </Campo>
-          <Campo rotulo="Benefício fiscal">
-            <select aria-label="Benefício fiscal" className="h-8 w-full rounded-md border px-2" value={form.beneficioFiscalId} onChange={(e) => set('beneficioFiscalId', e.target.value)}>
-              <option value="">{beneficios.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
-              {beneficios.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
-            </select>
-            <Button type="button" variant="secondary" onClick={() => onNovoCodigo?.('beneficio')}>Novo código</Button>
-          </Campo>
-          <CampoSelect rotulo="Tratamento IPI" valor={form.ipiCst} opcoes={ROTULOS_IPI} onChange={(valor) => set('ipiCst', valor)} />
-          <CampoSelect rotulo="Tratamento PIS/COFINS" valor={form.pisCst} opcoes={ROTULOS_PIS} onChange={(valor) => set('pisCst', valor)} />
-          <CampoSelect rotulo="Tratamento IBS/CBS" valor={form.ibsCst} opcoes={ROTULOS_IBS} onChange={(valor) => set('ibsCst', valor)} />
-          <Campo rotulo="Classificação IBS/CBS">
-            <select aria-label="Classificação IBS/CBS" className="h-8 w-full rounded-md border px-2" value={form.classificacaoIbsCbsId} onChange={(e) => set('classificacaoIbsCbsId', e.target.value)}>
-              <option value="">{classificacoes.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
-              {classificacoes.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
-            </select>
-            <Button type="button" variant="secondary" onClick={() => onNovoCodigo?.('classificacao')}>Novo código</Button>
-          </Campo>
-          <Campo rotulo="Início de vigência" selo="H-E01-10">
-            <input aria-label="Início de vigência" type="date" className="h-8 w-full rounded-md border px-2" value={form.vigenciaInicio} onChange={(e) => set('vigenciaInicio', e.target.value)} />
-          </Campo>
-          <Campo rotulo="Fim de vigência" selo="H-E01-10">
-            <input aria-label="Fim de vigência" type="date" className="h-8 w-full rounded-md border px-2" value={form.vigenciaFim ?? ''} onChange={(e) => set('vigenciaFim', e.target.value)} />
-          </Campo>
-          <label className="grid gap-1 text-xs" htmlFor="regra-justificativa">
-            Justificativa auditável
-            <textarea id="regra-justificativa" className="min-h-16 rounded-md border px-2 py-1" value={form.justificativa} onChange={(e) => set('justificativa', e.target.value)} />
-          </label>
-          {avisos && <p role="alert" className="text-sm text-destructive">{avisos}</p>}
-          {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
-        </div>
-        <SheetFooter>
-          <Button type="button" variant="secondary" onClick={fechar}>Cancelar</Button>
-          <Button type="button" variant="secondary" onClick={() => setAvisos(verificar())}>Verificar dados</Button>
-          <Button type="button" onClick={() => void salvar()}>Salvar rascunho</Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={aberto} onOpenChange={(open) => { if (!open) tentarFechar(); }}>
+        <SheetContent
+          aria-describedby={undefined}
+          onCloseAutoFocus={retornoFoco}
+          onPointerDownOutside={manterDialogoAninhado}
+          onFocusOutside={manterDialogoAninhado}
+          onInteractOutside={manterDialogoAninhado}
+          className="w-full overflow-y-auto sm:max-w-xl"
+        >
+          <SheetHeader>
+            <SheetTitle>{detalhe ? 'Editar versão' : 'Novo registro'}</SheetTitle>
+          </SheetHeader>
+          <form
+            id="regra-form"
+            noValidate
+            className="grid gap-3 px-4"
+            onSubmit={(e) => { e.preventDefault(); void salvar(); }}
+          >
+            <CampoForm rotulo="Enquadramento fiscal" htmlFor="reg-enq" erro={erroDe('enquadramentoId')}>
+              <ComboboxBusca id="reg-enq" buscar={buscarEnquadramentos} value={form.enquadramentoId} rotulo={rotulos.enquadramentoId} onChange={(o) => void escolherEnquadramento(o)} placeholder="Enquadramento fiscal" searchPlaceholder="Buscar enquadramento" />
+            </CampoForm>
+            <CampoForm rotulo="Operação" htmlFor="reg-op" erro={erroDe('operacaoId')}>
+              <ComboboxBusca id="reg-op" tipo="operacoes" value={form.operacaoId} rotulo={rotulos.operacaoId} onChange={(o) => escolher('operacaoId', o)} placeholder="Operação" searchPlaceholder="Buscar operação" />
+            </CampoForm>
+            <CampoForm rotulo="Operação fiscal (CFOP)" htmlFor="reg-cfop" erro={erroDe('cfopId')}>
+              <ComboboxBusca id="reg-cfop" tipo="cfops" value={form.cfopId} rotulo={rotulos.cfopId} onChange={(o) => escolher('cfopId', o)} placeholder="Operação fiscal (CFOP)" searchPlaceholder="Buscar CFOP" />
+            </CampoForm>
+            {preenchendo && <p role="status" className="text-xs text-muted-foreground">Carregando a operação e o CFOP do enquadramento…</p>}
+            <CampoSelect rotulo="Tratamento ICMS" valor={form.icmsCst} opcoes={ROTULOS_ICMS} erro={erroDe('icmsCst')} onChange={(valor) => set('icmsCst', valor)} />
+            <CampoForm rotulo="Redução de base do ICMS (%)" erro={erroDe('pRedBc')}>
+              <span className="inline-flex items-center gap-1">
+                <span aria-hidden="true">%</span>
+                <input aria-label="Redução de base do ICMS (%)" inputMode="decimal" className="h-8 w-full rounded-md border px-2" value={form.pRedBc} onChange={(e) => set('pRedBc', e.target.value)} />
+              </span>
+            </CampoForm>
+            <CampoForm rotulo="Alíquota (%)" erro={erroDe('pIcms')}>
+              <span className="inline-flex items-center gap-1">
+                <span aria-hidden="true">%</span>
+                <input aria-label="Alíquota (%)" inputMode="decimal" className="h-8 w-full rounded-md border px-2" value={form.pIcms} onChange={(e) => set('pIcms', e.target.value)} />
+              </span>
+            </CampoForm>
+            <CampoForm rotulo="Benefício fiscal" htmlFor="reg-ben" erro={erroDe('beneficioFiscalId')}>
+              <ComboboxBusca id="reg-ben" buscar={buscarBeneficios} value={form.beneficioFiscalId} rotulo={rotulos.beneficioFiscalId} onChange={(o) => escolher('beneficioFiscalId', o)} placeholder="Benefício fiscal" searchPlaceholder="Buscar benefício fiscal" />
+              <Button type="button" variant="secondary" onClick={() => onNovoCodigo('beneficio')}>Novo código</Button>
+            </CampoForm>
+            <CampoSelect rotulo="Tratamento IPI" valor={form.ipiCst} opcoes={ROTULOS_IPI} erro={erroDe('ipiCst')} onChange={(valor) => set('ipiCst', valor)} />
+            <CampoSelect rotulo="Tratamento PIS/COFINS" valor={form.pisCst} opcoes={ROTULOS_PIS} erro={erroDe('pisCst')} onChange={(valor) => set('pisCst', valor)} />
+            <CampoSelect rotulo="Tratamento IBS/CBS" valor={form.ibsCst} opcoes={ROTULOS_IBS} erro={erroDe('ibsCst')} onChange={(valor) => set('ibsCst', valor)} />
+            <CampoForm rotulo="Classificação IBS/CBS" htmlFor="reg-cla" erro={erroDe('classificacaoIbsCbsId')}>
+              <ComboboxBusca id="reg-cla" buscar={buscarClassificacoes} value={form.classificacaoIbsCbsId} rotulo={rotulos.classificacaoIbsCbsId} onChange={(o) => escolher('classificacaoIbsCbsId', o)} placeholder="Classificação IBS/CBS" searchPlaceholder="Buscar classificação IBS/CBS" />
+              <Button type="button" variant="secondary" onClick={() => onNovoCodigo('classificacao')}>Novo código</Button>
+            </CampoForm>
+            <CampoForm rotulo="Início de vigência" selo="H-E01-10" erro={erroDe('vigenciaInicio')}>
+              <input aria-label="Início de vigência" type="date" className="h-8 w-full rounded-md border px-2" value={form.vigenciaInicio} onChange={(e) => set('vigenciaInicio', e.target.value)} />
+            </CampoForm>
+            <CampoForm rotulo="Fim de vigência" selo="H-E01-10" erro={erroDe('vigenciaFim')}>
+              <input aria-label="Fim de vigência" type="date" className="h-8 w-full rounded-md border px-2" value={form.vigenciaFim ?? ''} onChange={(e) => set('vigenciaFim', e.target.value)} />
+            </CampoForm>
+            <CampoForm rotulo="Justificativa auditável" htmlFor="regra-justificativa" erro={erroDe('justificativa')}>
+              <textarea id="regra-justificativa" maxLength={500} className="min-h-16 rounded-md border px-2 py-1" value={form.justificativa} onChange={(e) => set('justificativa', e.target.value)} />
+            </CampoForm>
+            {aviso && <p role="alert" className="text-sm text-destructive">{aviso}</p>}
+            {verificado && <p role="status" className="text-sm text-muted-foreground">Dados verificados.</p>}
+            {erroSalvar && <p role="alert" className="text-sm text-destructive">{erroSalvar}</p>}
+          </form>
+          <SheetFooter>
+            <Button type="button" variant="secondary" onClick={tentarFechar}>Cancelar</Button>
+            <Button type="button" variant="secondary" onClick={() => verificar()}>Verificar dados</Button>
+            <Button type="submit" form="regra-form" loading={salvando} disabled={preenchendo}>Salvar rascunho</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <ConfirmarSaidaDialog
+        aberto={confirmarSaida}
+        onAbertoChange={setConfirmarSaida}
+        onDescartar={() => {
+          setConfirmarSaida(false);
+          onFechar();
+        }}
+      />
+    </>
   );
 }
 
-function CampoSelect({ rotulo, valor, opcoes, onChange }: { rotulo: string; valor: string; opcoes: Record<string, string>; onChange: (valor: string) => void }) {
+function CampoSelect({ rotulo, valor, opcoes, erro, onChange }: {
+  rotulo: string;
+  valor: string;
+  opcoes: Record<string, string>;
+  erro?: string;
+  onChange: (valor: string) => void;
+}) {
   return (
-    <Campo rotulo={rotulo}>
+    <CampoForm rotulo={rotulo} erro={erro}>
       <select aria-label={rotulo} className="h-8 w-full rounded-md border px-2" value={valor} onChange={(e) => onChange(e.target.value)}>
         {Object.entries(opcoes).map(([codigo, nome]) => <option key={codigo} value={codigo}>{nome}</option>)}
       </select>
-    </Campo>
-  );
-}
-
-function Campo({ rotulo, selo, children }: { rotulo: string; selo?: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1 text-xs">
-      <span className="inline-flex items-center gap-2">{rotulo}{selo && <BadgeProvisorio codigo={selo} />}</span>
-      {children}
-    </div>
+    </CampoForm>
   );
 }

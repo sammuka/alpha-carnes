@@ -1,4 +1,5 @@
 import { extrairCodigoErro, extrairErrosPorCampo, extrairMensagemErro } from './error-message';
+import { buscarCatalogo, mensagemRotulada, TEXTO_SERVICO_INDISPONIVEL } from './fiscal-comum-ui';
 
 const ENTRADA = /^\d{1,3}(\.\d{1,2})?$/;
 
@@ -83,6 +84,27 @@ const MENSAGENS: Record<string, string> = {
   REGRAS_DISTINTAS: 'A comparação exige duas versões do mesmo código.',
 };
 
+/** Rótulos da tela para os campos que a validação do servidor aponta. */
+export const ROTULOS_CAMPOS: Record<string, string> = {
+  enquadramentoId: 'Enquadramento fiscal',
+  operacaoId: 'Operação',
+  cfopId: 'Operação fiscal (CFOP)',
+  icmsCst: 'Tratamento ICMS',
+  pRedBc: 'Redução de base do ICMS (%)',
+  pIcms: 'Alíquota (%)',
+  beneficioFiscalId: 'Benefício fiscal',
+  ipiCst: 'Tratamento IPI',
+  pisCst: 'Tratamento PIS/COFINS',
+  ibsCst: 'Tratamento IBS/CBS',
+  classificacaoIbsCbsId: 'Classificação IBS/CBS',
+  vigenciaInicio: 'Início de vigência',
+  vigenciaFim: 'Fim de vigência',
+  justificativa: 'Justificativa auditável',
+  versao: 'Versão',
+  codigo: 'Código',
+  descricao: 'Descrição',
+};
+
 export class ErroRegra extends Error {
   constructor(
     mensagem: string,
@@ -98,11 +120,20 @@ export class ErroRegra extends Error {
 export function mensagemDeRegra(erro: ErroRegra): string {
   const fechada = erro.codigo ? MENSAGENS[erro.codigo] : undefined;
   if (fechada) return fechada;
-  if (erro.status >= 500 || erro.status === 0) return 'Serviço indisponível no momento. Tente novamente.';
+  if (erro.status >= 500 || erro.status === 0) return TEXTO_SERVICO_INDISPONIVEL;
   return erro.message;
 }
 
 const BASE = '/api/erp/fiscal';
+
+function criarErro(status: number, body: unknown): ErroRegra {
+  const codigo = extrairCodigoErro(body);
+  const porCampo = extrairErrosPorCampo(body);
+  const fechada = codigo ? MENSAGENS[codigo] : undefined;
+  const rotulada = status === 400 ? mensagemRotulada(porCampo, ROTULOS_CAMPOS) : null;
+  const indisponivel = status >= 500 ? TEXTO_SERVICO_INDISPONIVEL : null;
+  return new ErroRegra(fechada || indisponivel || rotulada || extrairMensagemErro(body, 'Falha na operação.'), status, codigo, porCampo);
+}
 
 async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Promise<T> {
   let res: Response;
@@ -115,13 +146,7 @@ async function chamar<T>(metodo: string, caminho: string, corpo?: unknown): Prom
   } catch {
     throw new ErroRegra('Serviço indisponível. Verifique a conexão e tente novamente.', 0, 'SERVICO_INDISPONIVEL', {});
   }
-  if (!res.ok) {
-    const body: unknown = await res.json().catch(() => null);
-    const codigo = extrairCodigoErro(body);
-    const fechada = codigo ? MENSAGENS[codigo] : undefined;
-    const mensagem = fechada || extrairMensagemErro(body, 'Falha na operação.');
-    throw new ErroRegra(mensagem, res.status, codigo, extrairErrosPorCampo(body));
-  }
+  if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
   if (res.status === 204) return undefined as T;
   return (await res.json().catch(() => null)) as T;
 }
@@ -153,6 +178,10 @@ export const FILTROS_LISTA: FiltrosLista = {
 
 export interface LinhaRegra {
   id: string;
+  /** Linhagem, número da versão e situação identificam a versão; não são colunas da grade. */
+  codigo: string;
+  numeroVersao: number;
+  situacao: string;
   enquadramentoFiscal: string;
   operacaoFiscal: string;
   beneficioFiscal: string;
@@ -167,16 +196,21 @@ export interface DetalheRegra {
   numeroVersao: number;
   versao: number;
   enquadramentoId: string;
+  enquadramentoCodigo: string;
   operacaoId: string;
+  operacaoRotulo: string;
   cfopId: string;
+  cfopCodigo: string;
   icmsCst: string;
   pRedBc: string;
   pIcms: string;
   beneficioFiscalId: string;
+  beneficioDescricao: string;
   ipiCst: string;
   pisCst: string;
   ibsCst: string;
   classificacaoIbsCbsId: string;
+  classificacaoDescricao: string;
   vigenciaInicio: string;
   vigenciaFim: string | null;
   situacao: string;
@@ -187,6 +221,9 @@ export interface DetalheRegra {
   autor: string | null;
   aprovador: string | null;
   tratamentoIcms: string;
+  tratamentoIpi: string;
+  tratamentoPis: string;
+  tratamentoIbs: string;
 }
 
 export interface CorpoRegra {
@@ -207,11 +244,6 @@ export interface CorpoRegra {
   versao?: number;
 }
 
-export interface OpcaoCombo {
-  id: string;
-  rotulo: string;
-}
-
 export interface ContagensRegra {
   total: number;
   rascunhos: number;
@@ -226,7 +258,7 @@ export interface EventoHistorico {
   situacaoNova: string | null;
   usuarioNome: string | null;
   criadoEm: string;
-  justificativa: string;
+  justificativa: string | null;
   resumo: string | null;
   versao: number | null;
   numeroVersao: number | null;
@@ -245,13 +277,34 @@ export interface Diferenca {
   depois: string;
 }
 
+/** Operação e CFOP do enquadramento escolhido, para preencher os dois combos. */
+export interface EnquadramentoRef {
+  operacaoId: string;
+  operacaoRotulo: string;
+  cfopId: string;
+  cfopCodigo: string;
+  cfopDescricao: string;
+}
+
+export interface Paginado<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 const item = (id: string) => `/regras/${encodeURIComponent(id)}`;
+
+/** Filtros que valem para a lista, as contagens e a exportação (sem página nem ordenação nas contagens). */
+const filtrosDe = (f: FiltrosLista) => ({ search: f.search, cfopId: f.cfopId });
 
 export const regrasApi = {
   listar: (filtros: FiltrosLista) =>
-    chamar<{ data: LinhaRegra[]; total: number }>('GET', `/regras${qs({ ...filtros, pageSize: 20 })}`),
-  contagens: (filtros: FiltrosLista) =>
-    chamar<ContagensRegra>('GET', `/regras/contagens${qs({ search: filtros.search, cfopId: filtros.cfopId })}`),
+    chamar<Paginado<LinhaRegra>>('GET', `/regras${qs({ ...filtros, pageSize: 20 })}`),
+  contagens: (filtros: FiltrosLista) => chamar<ContagensRegra>('GET', `/regras/contagens${qs(filtrosDe(filtros))}`),
+  /** Versões da mesma linhagem (mesmo código), com número da versão e situação. */
+  versoesDoCodigo: async (codigo: string) =>
+    (await chamar<Paginado<LinhaRegra>>('GET', `/regras${qs({ codigo, pageSize: 100 })}`)).data,
   obter: (id: string) => chamar<DetalheRegra>('GET', item(id)),
   historico: (id: string) => chamar<EventoHistorico[]>('GET', `${item(id)}/historico`),
   preCondicoes: (id: string) => chamar<PreCondicao[]>('GET', `${item(id)}/pre-condicoes`),
@@ -262,20 +315,40 @@ export const regrasApi = {
   aprovar: (id: string, corpo: { versao: number; justificativa: string }) => chamar<DetalheRegra>('POST', `${item(id)}/aprovar`, corpo),
   aposentar: (id: string, corpo: { versao: number; justificativa: string }) => chamar<DetalheRegra>('POST', `${item(id)}/aposentar`, corpo),
   comparar: (id: string, com: string) => chamar<{ diferencas: Diferenca[] }>('GET', `${item(id)}/comparar${qs({ com })}`),
+  enquadramento: (id: string) => chamar<EnquadramentoRef>('GET', `/enquadramentos/${encodeURIComponent(id)}`),
   criarBeneficio: (corpo: { codigo: string; descricao: string; justificativa: string }) =>
     chamar<{ id: string; descricao: string }>('POST', '/beneficios-fiscais', corpo),
   criarClassificacao: (corpo: { codigo: string; descricao: string; justificativa: string }) =>
     chamar<{ id: string; descricao: string }>('POST', '/classificacoes-ibs-cbs', corpo),
+  /** CSV da visão atual: mesmos filtros e ordenação da grade. */
+  exportar: async (filtros: FiltrosLista) => {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/regras/exportacao${qs({ ...filtrosDe(filtros), sort: filtros.sort, dir: filtros.dir })}`, { cache: 'no-store' });
+    } catch {
+      throw new ErroRegra('Serviço indisponível. Verifique a conexão e tente novamente.', 0, 'SERVICO_INDISPONIVEL', {});
+    }
+    if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
+    return res.blob();
+  },
 };
 
-function linhasDe(body: unknown): Record<string, unknown>[] {
-  if (body && typeof body === 'object' && Array.isArray((body as { data?: unknown }).data)) {
-    return (body as { data: Record<string, unknown>[] }).data;
-  }
-  return [];
+/** Texto do item do combo de versões: código, número da versão e situação. */
+export function rotuloVersao(linha: Pick<LinhaRegra, 'codigo' | 'numeroVersao' | 'situacao'>): string {
+  return `${linha.codigo} · versão ${linha.numeroVersao} · ${linha.situacao}`;
 }
 
-export async function opcoesDe(caminho: string, rotulo: (linha: Record<string, unknown>) => string): Promise<OpcaoCombo[]> {
-  const body = await chamar<unknown>('GET', caminho);
-  return linhasDe(body).map((linha) => ({ id: String(linha.id ?? ''), rotulo: rotulo(linha) })).filter((itemCombo) => itemCombo.id);
-}
+const texto = (valor: unknown) => String(valor ?? '');
+
+/** Combos de busca no servidor (identidade estável para o `ComboboxBusca`). */
+export const buscarEnquadramentos = (termo: string) =>
+  buscarCatalogo('/api/erp/fiscal/enquadramentos', termo, (l) => ({
+    id: l.situacao === 'INATIVA' ? '' : texto(l.id),
+    rotulo: `${texto(l.codigo)} · ${texto(l.operacao)}`,
+  }));
+
+export const buscarBeneficios = (termo: string) =>
+  buscarCatalogo('/api/erp/fiscal/beneficios-fiscais', termo, (l) => ({ id: texto(l.id), rotulo: texto(l.descricao) }));
+
+export const buscarClassificacoes = (termo: string) =>
+  buscarCatalogo('/api/erp/fiscal/classificacoes-ibs-cbs', termo, (l) => ({ id: texto(l.id), rotulo: texto(l.descricao) }));
