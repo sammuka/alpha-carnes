@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { normalizarJustificativa } from '@/lib/justificativa';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { codigoFiscalValido, normalizarCest, normalizarCfop, normalizarNcm } from '@/lib/fiscal-enquadramentos';
@@ -51,7 +52,7 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
             void Promise.resolve(onConfirmar({
               codigo: normalizado,
               descricao: descricao.trim(),
-              justificativa: motivo.trim(),
+              justificativa: normalizarJustificativa(motivo),
             })).catch((falha: unknown) => {
               setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
             });

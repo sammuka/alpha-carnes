@@ -1,4 +1,5 @@
 import { extrairMensagemErro } from './error-message';
+import { normalizarJustificativa } from './justificativa';
 import { rotuloData, TAMANHO_BUSCA, type OpcaoCombo, type ResultadoBusca } from './fiscal-enquadramentos';
 
 /**
@@ -19,17 +20,8 @@ export interface FalhaSalvar {
   conflito?: boolean;
 }
 
-/**
- * Formatação invisível (\p{Cf}: largura zero, U+2060, U+00AD, U+FEFF...) e os brancos visuais que não são
- * Cf nem espaço (U+034F, U+2800, U+3164, U+115F, U+1160, U+FFA0). Acentos (\p{Mn}) permanecem.
- * É o mesmo conjunto do normalizador do servidor (common/validators/justificativa.ts).
- */
-const INVISIVEIS = /[\p{Cf}\u034F\u2800\u3164\u115F\u1160\uFFA0]/gu;
-
-/** Texto sem invisíveis e sem espaços Unicode nas pontas: o que vale para o mínimo de caracteres e o que se envia. */
-export function textoUtil(valor: string): string {
-  return valor.replace(INVISIVEIS, '').trim();
-}
+/** Texto que vale para o mínimo de caracteres e que se envia: o normalizador único de `./justificativa`. */
+export const textoUtil = normalizarJustificativa;
 
 /** Rodapé do protótipo (aplicacao.js L176) sem a palavra "fictícios": `Exibindo N de M registros`. */
 export function textoExibindo(exibidos: number, total: number): string {

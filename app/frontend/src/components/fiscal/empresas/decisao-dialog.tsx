@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
-import { textoUtil } from '@/lib/fiscal-comum-ui';
 import {
   ehConflitoConcorrente,
   ErroFiscal,
@@ -25,6 +24,7 @@ import {
   type RegimeVigente,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
+import { normalizarJustificativa } from '@/lib/justificativa';
 
 /** Descreve uma decisão que exige justificativa: submeter, aprovar, rejeitar, suspender, remover… */
 export interface DecisaoPendente {
@@ -90,8 +90,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
 
   const executar = async (confirmarTroca: boolean) => {
     if (!decisao || emVoo.current) return;
-    // Invisíveis e brancos visuais não contam para o mínimo (o servidor aplica o mesmo normalizador).
-    const texto = textoUtil(justificativa);
+    const texto = normalizarJustificativa(justificativa);
     if (texto.length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;

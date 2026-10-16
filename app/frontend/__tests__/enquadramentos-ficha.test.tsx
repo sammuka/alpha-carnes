@@ -580,3 +580,150 @@ describe('Ações do processo com foco no campo', () => {
     await waitFor(() => expect(screen.getByLabelText('Prioridade')).toHaveFocus());
   });
 });
+
+/** Segura as respostas que casam com o filtro, para simular pedido em voo. */
+function segurar(casa: (metodo: string, url: URL) => boolean) {
+  const original = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+  const pendentes: Array<() => void> = [];
+  global.fetch = jest.fn((entrada: string, init?: RequestInit) => {
+    const url = new URL(String(entrada), 'http://localhost');
+    if (!casa(init?.method ?? 'GET', url)) return original(entrada, init);
+    return new Promise<Response>((resolver) => { pendentes.push(() => { void original(entrada, init).then(resolver); }); });
+  }) as unknown as typeof fetch;
+  return { pendentes };
+}
+
+describe('drawer de criação isolado da ficha selecionada', () => {
+  it('evento de remoção da ficha não bloqueia o drawer Novo registro nem apaga o digitado', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await user.type(await screen.findByLabelText(/Motivo da alteração/), 'Cadastro inicial');
+    const rota = `/api/erp/fiscal/enquadramentos/${ENQ}`;
+    const anterior = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+    global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
+      const url = new URL(String(entrada), 'http://localhost');
+      if (url.pathname === rota || url.pathname.startsWith(`${rota}/`)) {
+        return envelope(404, { message: 'Enquadramento não encontrado.', codigo: 'NAO_ENCONTRADO' });
+      }
+      return anterior(entrada, init);
+    }) as unknown as typeof fetch;
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await waitFor(() => expect(screen.queryByText('Alpha Carnes Ltda')).not.toBeInTheDocument());
+    expect(screen.queryByText('Este registro foi removido por outro usuário.')).not.toBeInTheDocument();
+    expect(screen.getByText('Novo registro', { selector: '[data-slot="sheet-title"]' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salvar rascunho' })).toBeEnabled();
+    expect(screen.getByLabelText(/Motivo da alteração/)).toHaveValue('Cadastro inicial');
+  });
+});
+
+describe('foco ao fechar o que foi aberto pelo menu Ações do processo', () => {
+  it('Duplicar perfil devolve o foco ao botão Ações do processo', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const gatilho = screen.getByRole('button', { name: /Ações do processo/ });
+    await user.click(gatilho);
+    await user.click(await screen.findByRole('menuitem', { name: 'Duplicar perfil' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(gatilho).toHaveFocus());
+  });
+
+  it('Cadastrar operação devolve o foco ao botão Ações do processo', async () => {
+    const { user } = renderizar();
+    const gatilho = await screen.findByRole('button', { name: /Ações do processo/ });
+    await user.click(gatilho);
+    await user.click(await screen.findByRole('menuitem', { name: 'Cadastrar operação' }));
+    await screen.findByRole('dialog');
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(gatilho).toHaveFocus());
+  });
+});
+
+describe('Duplicar após conflito 409', () => {
+  it('oferece Recarregar dados, preserva o digitado e reenvia com a versão atualizada', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Duplicar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da duplicação'), 'Copia para o fim do ano');
+    detalhe = { ...detalhe, versao: 2 };
+    proximaMutacao = envelope(409, { message: 'conflito', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    await user.click(await within(dialogo).findByRole('button', { name: 'Recarregar dados' }));
+    await waitFor(() => expect(within(dialogo).queryByRole('button', { name: 'Recarregar dados' })).not.toBeInTheDocument());
+    expect(within(dialogo).getByLabelText('Motivo da duplicação')).toHaveValue('Copia para o fim do ano');
+    proximaMutacao = null;
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    await waitFor(() => expect(chamadas.filter((c) => c.url.pathname.endsWith('/duplicar'))).toHaveLength(2));
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/duplicar'))[1]!.corpo?.versao).toBe(2);
+  });
+});
+
+describe('envio em andamento', () => {
+  it('duplo clique em Salvar rascunho gera um único PATCH', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    await user.type(await screen.findByLabelText(/Motivo da alteração/), 'Ajuste de prioridade');
+    const seg = segurar((m) => m === 'PATCH');
+    const salvar = screen.getByRole('button', { name: 'Salvar rascunho' });
+    await user.dblClick(salvar);
+    expect(salvar).toBeDisabled();
+    expect(seg.pendentes).toHaveLength(1);
+    await act(async () => { seg.pendentes.forEach((p) => p()); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'PATCH')).toHaveLength(1);
+  });
+
+  it('duplo clique em Duplicar gera um único POST', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Duplicar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da duplicação'), 'Copia para o fim do ano');
+    const seg = segurar((m, u) => m === 'POST' && u.pathname.endsWith('/duplicar'));
+    const confirmar = within(dialogo).getByRole('button', { name: 'Duplicar' });
+    await user.dblClick(confirmar);
+    expect(confirmar).toBeDisabled();
+    expect(seg.pendentes).toHaveLength(1);
+    await act(async () => { seg.pendentes.forEach((p) => p()); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/duplicar'))).toHaveLength(1);
+  });
+
+  it('duplo clique em Inativar gera uma única chamada', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Inativar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText(/Justificativa/), 'Perfil substituído');
+    const seg = segurar((m, u) => m !== 'GET' && u.pathname.endsWith('/inativar'));
+    const confirmar = within(dialogo).getByRole('button', { name: 'Inativar' });
+    await user.dblClick(confirmar);
+    expect(seg.pendentes).toHaveLength(1);
+    await act(async () => { seg.pendentes.forEach((p) => p()); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/inativar'))).toHaveLength(1);
+  });
+});
+
+describe('justificativa com invisíveis fora do intervalo U+200B-200D', () => {
+  it('o diálogo de inativação recusa 3×U+2060 e U+00AD', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Inativar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByLabelText(/Justificativa/));
+    await user.paste('⁠⁠⁠­');
+    await user.click(within(dialogo).getByRole('button', { name: 'Inativar' }));
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(/Informe a justificativa/);
+    expect(chamadas.some((c) => c.url.pathname.endsWith('/inativar'))).toBe(false);
+  });
+});

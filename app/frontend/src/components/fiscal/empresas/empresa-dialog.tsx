@@ -16,6 +16,7 @@ import {
   type Empresa,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
+import { normalizarJustificativa } from '@/lib/justificativa';
 
 interface EmpresaDialogProps {
   aberto: boolean;
@@ -61,7 +62,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
     const locais: Record<string, string> = {};
     if (!razaoSocial.trim()) locais.razaoSocial = 'Informe a razão social.';
     if (!editando && normalizarCnpj(cnpjRaiz).length !== 8) locais.cnpjRaiz = 'CNPJ raiz deve ter 8 letras ou dígitos.';
-    if (justificativa.trim().length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (normalizarJustificativa(justificativa).length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     setErros(locais);
     setErroGeral(null);
     if (Object.keys(locais).length > 0) return;
@@ -72,12 +73,12 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
         ? await fiscalApi.atualizarEmpresa(empresa.id, {
             razaoSocial: razaoSocial.trim(),
             versao: empresa.versao,
-            justificativa: justificativa.trim(),
+            justificativa: normalizarJustificativa(justificativa),
           })
         : await fiscalApi.criarEmpresa({
             razaoSocial: razaoSocial.trim(),
             cnpjRaiz: normalizarCnpj(cnpjRaiz),
-            justificativa: justificativa.trim(),
+            justificativa: normalizarJustificativa(justificativa),
           });
       toast.success(editando ? 'Empresa atualizada.' : 'Empresa cadastrada.');
       onSalvo(salva);

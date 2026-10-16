@@ -129,6 +129,7 @@ export function EnquadramentoDrawer({
   };
   const [form, setForm] = useState<CorpoEnquadramento>(VAZIO);
   const [avisos, setAvisos] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const [rotulos, setRotulos] = useState<Rotulos>(ROTULOS_VAZIOS);
   // Ficha como estava na última leitura, para apontar o que outro usuário mudou depois.
   const [base, setBase] = useState<CorpoEnquadramento | null>(null);
@@ -207,8 +208,13 @@ export function EnquadramentoDrawer({
       justificativa: limparJustificativa(form.justificativa),
       vigenciaFim: form.vigenciaFim || undefined,
     };
-    const mensagem = await onSalvar(corpo);
-    if (mensagem) onErro(mensagem);
+    setEnviando(true);
+    try {
+      const mensagem = await onSalvar(corpo);
+      if (mensagem) onErro(mensagem);
+    } finally {
+      setEnviando(false);
+    }
   }
 
   return (
@@ -299,7 +305,7 @@ export function EnquadramentoDrawer({
         <SheetFooter>
           <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
           <Button type="button" variant="secondary" onClick={() => setAvisos(verificar())}>Verificar dados</Button>
-          <Button type="button" disabled={removido} onClick={() => void salvar()}>Salvar rascunho</Button>
+          <Button type="button" disabled={removido || enviando} onClick={() => void salvar()}>Salvar rascunho</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
