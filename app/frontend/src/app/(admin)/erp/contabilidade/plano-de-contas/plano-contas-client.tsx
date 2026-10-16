@@ -213,6 +213,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
   const [paiRotulo, setPaiRotulo] = useState('');
   const [erroPais, setErroPais] = useState('');
   const pedidoPais = useRef(0);
+  const pedidoRotuloPai = useRef(0);
   const botaoPesquisaPai = useRef<HTMLButtonElement>(null);
   const popupPai = useRef<HTMLDivElement>(null);
   const [centroNovo, setCentroNovo] = useState({ codigo: '', nome: '', justificativa: '' });
@@ -315,6 +316,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setForm(FORM_VAZIO);
     setFormBase(JSON.stringify(FORM_VAZIO));
     setDrawer('criar');
+    pedidoRotuloPai.current += 1;
     setPaiRotulo('');
     setLookupPai(false);
     setCentrosVazios(false);
@@ -342,7 +344,12 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setPaiRotulo('');
     setLookupPai(false);
     const pai = preenchido.contaPaiCodigo;
-    if (pai) void rotuloDoPai(pai).then((nome) => setPaiRotulo((atual) => (nome && !atual ? nome : atual)));
+    const pedido = (pedidoRotuloPai.current += 1);
+    if (pai) {
+      void rotuloDoPai(pai).then((nome) => {
+        if (pedido === pedidoRotuloPai.current) setPaiRotulo((atual) => (nome && !atual ? nome : atual));
+      });
+    }
   }
 
   function voltar() {
@@ -362,6 +369,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
         sessionStorage.setItem(CHAVE_RASCUNHO, '{}');
       }
     }
+    pedidoRotuloPai.current += 1;
     setDrawer(null);
   }
 
@@ -441,6 +449,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
 
   function escolherPai(opcao: OpcaoPai) {
     setForm({ ...form, contaPaiCodigo: opcao.codigo });
+    pedidoRotuloPai.current += 1;
     setPaiRotulo(opcao.nome);
     fecharPesquisaPai();
   }

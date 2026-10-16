@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PlanoContasClient, type ContaGrade } from '../src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client';
 
@@ -225,6 +225,28 @@ describe('lookup de conta pai: teclado e edição', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
     expect(await screen.findByRole('option', { name: 'Pai remoto' })).toBeInTheDocument();
     expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q=P90');
+  });
+
+  it('resposta atrasada do nome do pai não preenche o rótulo de outra conta', async () => {
+    let liberar: (r: Response) => void = () => undefined;
+    mockFetch((q) => (q === 'P90'
+      ? new Promise<Response>((r) => { liberar = r; })
+      : Promise.resolve(resposta({ itens: [] }))));
+    render(<PlanoContasClient inicial={[
+      { ...linha('C1', 'Filha um'), contaPaiCodigo: 'P90' },
+      { ...linha('C2', 'Filha dois'), contaPaiCodigo: 'P91' },
+    ]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }));
+    await userEvent.click(screen.getAllByText('Filha dois')[0]!);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
+    expect(await screen.findByRole('option', { name: 'P91' })).toBeInTheDocument();
+    await act(async () => {
+      liberar(resposta({ itens: [{ codigo: 'P90', nome: 'Pai remoto' }] }));
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.queryByRole('option', { name: 'Pai remoto' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'P91' })).toBeInTheDocument();
   });
 
   it('reabrir o popup limpa as opções antigas até a nova resposta', async () => {
