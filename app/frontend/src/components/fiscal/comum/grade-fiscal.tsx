@@ -64,7 +64,7 @@ export function GradeFiscal<L extends { id: string }>({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {colunas.map((coluna) => {
-                if (coluna.ordenavel === false) return <TableHead key={coluna.id}>{coluna.rotulo}</TableHead>;
+                if (coluna.ordenavel === false) return <TableHead key={coluna.id}><span className="font-semibold normal-case">{coluna.rotulo}</span></TableHead>;
                 const ativa = sort === coluna.id;
                 const Icone = !ativa ? ArrowUpDown : dir === 'asc' ? ArrowUp : ArrowDown;
                 return (

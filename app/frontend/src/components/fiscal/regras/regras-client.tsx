@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
 import { baixarArquivo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { mascararCfop } from '@/lib/fiscal-enquadramentos';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   CHAVE_LISTA,
@@ -57,7 +58,7 @@ const TEXTOS_ACAO: Record<AcaoRegra, { titulo: string; detalhe: string; rotulo: 
 
 const COLUNAS: ColunaGrade<LinhaRegra>[] = [
   { id: 'enquadramento', rotulo: 'Enquadramento fiscal', celula: (l) => l.enquadramentoFiscal },
-  { id: 'cfop', rotulo: 'Operação fiscal (CFOP)', celula: (l) => l.operacaoFiscal, className: 'font-data' },
+  { id: 'cfop', rotulo: 'Operação fiscal (CFOP)', celula: (l) => mascararCfop(l.operacaoFiscal), className: 'font-data' },
   { id: 'cBenef', rotulo: 'Benefício fiscal', celula: (l) => l.beneficioFiscal },
   { id: 'cClassTrib', rotulo: 'Classificação IBS/CBS', celula: (l) => l.classificacaoIbsCbs },
   { id: 'operacao', rotulo: 'Operação', celula: (l) => l.operacao },

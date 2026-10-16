@@ -86,7 +86,7 @@ export function AbasDetalhe({
         <TabsTrigger value="aceite">Aceite e testes</TabsTrigger>
       </TabsList>
       <TabsContent value="ficha" className="grid gap-4 text-sm">
-        {detalhe.baseDifereBruto && <Aviso alerta>Base tributável difere de valor bruto</Aviso>}
+        {detalhe.baseDifereBruto && <div role="status"><Aviso alerta>Base tributável difere de valor bruto</Aviso></div>}
         <div>
           <SecaoRotulo>Informações do registro selecionado</SecaoRotulo>
           <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Dados principais</p>

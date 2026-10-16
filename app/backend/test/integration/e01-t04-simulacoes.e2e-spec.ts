@@ -641,6 +641,9 @@ describe('E01-T04 simulações fiscais', () => {
     const porRegra = await request(app.getHttpServer())
       .get('/fiscal/simulacoes').query({ regraId: aprovada.regraId, pageSize: 100 }).set('Cookie', admin);
     expect((porRegra.body.data as { id: string }[]).map((l) => l.id)).toEqual([criada.body.id]);
+    const porCodigo = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: criada.body.codigo, regraId: aprovada.regraId }).set('Cookie', admin);
+    expect((porCodigo.body.data as { id: string }[]).map((l) => l.id)).toContain(criada.body.id);
     const outraRegra = await request(app.getHttpServer())
       .get('/fiscal/simulacoes').query({ regraId: crypto.randomUUID() }).set('Cookie', admin);
     expect(outraRegra.body.total).toBe(0);

@@ -475,6 +475,7 @@ export class SimulacoesFiscaisService {
         ilike(operacoes.rotulo, termo),
         ilike(enquadramentosFiscais.codigo, termo),
         ilike(regrasTributarias.codigo, termo),
+        ilike(simulacoesFiscais.codigo, termo),
       ));
     }
     return and(...filtros);
