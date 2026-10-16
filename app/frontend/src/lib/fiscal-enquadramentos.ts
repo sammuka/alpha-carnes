@@ -474,3 +474,8 @@ export async function buscarOpcoes(tipo: TipoBusca, termo: string): Promise<Resu
   const total = typeof (body as { total?: unknown } | null)?.total === 'number' ? (body as { total: number }).total : bruto.length;
   return { opcoes, total, truncado: total > bruto.length };
 }
+
+/** Remove caracteres de largura zero e espaços das pontas; é o texto que conta para o mínimo e que o servidor grava. */
+export function limparJustificativa(texto: string): string {
+  return texto.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+}

@@ -97,16 +97,33 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [editando, setEditando] = useState(false);
   const [versaoEdicao, setVersaoEdicao] = useState(0);
   const [erroDrawer, setErroDrawer] = useState<string | null>(null);
-  const [duplicar, setDuplicar] = useState(false);
+  const [fichaEdicao, setFichaEdicao] = useState<DetalheEnquadramento | null>(null);
+  const [removidoEdicao, setRemovidoEdicao] = useState(false);
+  const [conflitoDrawer, setConflitoDrawer] = useState(false);
+  const [focoDrawer, setFocoDrawer] = useState<string | null>(null);
+  const [alvoDuplicar, setAlvoDuplicar] = useState<{ id: string; versao: number; prioridade: number } | null>(null);
   const [erroDuplicar, setErroDuplicar] = useState<string | null>(null);
   const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
   const [recarga, setRecarga] = useState(0);
   const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
+  const [busca, setBusca] = useState(() => lerFiltros().search);
   const pedidoFicha = useRef(0);
+  const pedidoLista = useRef(0);
+  const filtrosAtuais = useRef(filtros);
+  filtrosAtuais.current = filtros;
 
+  // Busca por texto: consulta o servidor só depois de uma pausa na digitação.
+  useEffect(() => {
+    if (busca === filtros.search) return;
+    const espera = setTimeout(() => setFiltros((atual) => ({ ...atual, search: busca, page: 1 })), 250);
+    return () => clearTimeout(espera);
+  }, [busca, filtros.search]);
+
+  /** Uma resposta antiga (pedido já superado por outro) não atualiza linhas, contagens, KPIs nem a página. */
   const carregar = useCallback(async () => {
+    const pedido = ++pedidoLista.current;
     setCarregando(true);
     setErroLista(null);
     try {
@@ -114,16 +131,18 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         enquadramentosApi.listar(filtros),
         enquadramentosApi.contagens(filtros),
       ]);
+      if (pedido !== pedidoLista.current) return;
       setLinhas(lista.data);
       setPaginacao({ total: lista.total, pageSize: lista.pageSize });
       setContagens(totais);
       // Removeu ou filtrou a última linha da página atual: volta para a última página existente.
       const ultima = Math.max(1, Math.ceil(lista.total / lista.pageSize));
-      if (filtros.page > ultima) setFiltros((atual) => ({ ...atual, page: ultima }));
+      if (filtrosAtuais.current.page > ultima) setFiltros((atual) => ({ ...atual, page: ultima }));
     } catch (erro) {
+      if (pedido !== pedidoLista.current) return;
       setErroLista(erro instanceof Error ? erro.message : 'Serviço indisponível no momento. Tente novamente.');
     } finally {
-      setCarregando(false);
+      if (pedido === pedidoLista.current) setCarregando(false);
     }
   }, [filtros]);
 
@@ -139,6 +158,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     } catch (erro) {
       if (pedido !== pedidoFicha.current) return;
       if (erro instanceof ErroEnquadramento && erro.status === 404) {
+        setRemovidoEdicao(true);
         setDetalhe(null);
         setSelecionadoId(null);
         setErroFicha('O enquadramento selecionado não está mais disponível.');
@@ -172,7 +192,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
 
   async function exportar() {
     try {
-      const blob = await enquadramentosApi.exportar(filtros);
+      const blob = await enquadramentosApi.exportar({ ...filtros, search: busca });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -214,12 +234,13 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
 
   async function salvar(corpo: CorpoEnquadramento): Promise<string | null> {
     try {
-      if (editando && detalhe) {
+      if (editando) {
+        if (!fichaEdicao || removidoEdicao) return 'Este registro foi removido por outro usuário.';
         const resto = Object.fromEntries(
           Object.entries(corpo).filter(([chave]) => chave !== 'estabelecimentoId'),
         ) as Omit<CorpoEnquadramento, 'estabelecimentoId'>;
-        await enquadramentosApi.atualizar(detalhe.id, { ...resto, versao: versaoEdicao });
-        await atualizarApos(detalhe.id);
+        await enquadramentosApi.atualizar(fichaEdicao.id, { ...resto, versao: versaoEdicao });
+        await atualizarApos(fichaEdicao.id);
       } else {
         await enquadramentosApi.criar(corpo);
         await carregar();
@@ -227,10 +248,13 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       toast.success('Enquadramento salvo.');
       setDrawer(false);
       setErroDrawer(null);
+      setConflitoDrawer(false);
       return null;
     } catch (erro) {
       if (erro instanceof ErroEnquadramento) {
-        if (erro.codigo === 'CONFLITO_CONCORRENTE' && detalhe) void carregarFicha(detalhe.id);
+        if (editando && erro.status === 404) setRemovidoEdicao(true);
+        setConflitoDrawer(erro.codigo === 'CONFLITO_CONCORRENTE');
+        if (erro.codigo === 'CONFLITO_CONCORRENTE' && fichaEdicao) void carregarFicha(fichaEdicao.id);
         return mensagemSobreposicao(erro) ?? erro.message;
       }
       return 'Falha na operação.';
@@ -299,9 +323,13 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     }
   }
 
-  function abrirNovoRegistro() {
+  function abrirNovoRegistro(foco: string | null = null) {
     setErroDrawer(null);
+    setConflitoDrawer(false);
     setSelecaoCodigo(null);
+    setFocoDrawer(foco);
+    setFichaEdicao(null);
+    setRemovidoEdicao(false);
     setEditando(false);
     setDrawer(true);
   }
@@ -309,10 +337,40 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   function abrirEdicao() {
     if (!detalhe) return;
     setErroDrawer(null);
+    setConflitoDrawer(false);
     setSelecaoCodigo(null);
+    setFocoDrawer(null);
+    setFichaEdicao(detalhe);
+    setRemovidoEdicao(false);
     setVersaoEdicao(detalhe.versao);
     setEditando(true);
     setDrawer(true);
+  }
+
+  /** Busca a versão atual da ficha em edição; os campos digitados ficam no drawer e a versão enviada passa a ser a nova. */
+  async function recarregarEdicao(): Promise<DetalheEnquadramento | null> {
+    if (!fichaEdicao) return null;
+    try {
+      const atual = await enquadramentosApi.obter(fichaEdicao.id);
+      setVersaoEdicao(atual.versao);
+      setDetalhe((anterior) => (anterior?.id === atual.id ? atual : anterior));
+      setErroDrawer(null);
+      setConflitoDrawer(false);
+      return atual;
+    } catch (erro) {
+      if (erro instanceof ErroEnquadramento && erro.status === 404) {
+        setRemovidoEdicao(true);
+        setErroDrawer(null);
+        setConflitoDrawer(false);
+      } else {
+        setErroDrawer(erro instanceof Error ? erro.message : 'Falha na operação.');
+      }
+      return null;
+    }
+  }
+
+  function abrirDuplicar() {
+    if (detalhe) setAlvoDuplicar({ id: detalhe.id, versao: detalhe.versao, prioridade: detalhe.prioridade });
   }
 
   function comboBusca(rotulo: string, id: string, tipo: 'estabelecimentos' | 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
@@ -346,17 +404,20 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       >
         <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
         {podeGerenciar && (
-          <Button type="button" variant="secondary" onClick={abrirNovoRegistro}>+ Novo registro</Button>
+          <Button type="button" variant="secondary" onClick={() => abrirNovoRegistro()}>+ Novo registro</Button>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button type="button" aria-haspopup="menu">Ações do processo <ChevronDown aria-hidden="true" /></Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={abrirNovoRegistro}>Cadastrar operação</DropdownMenuItem>
-            <DropdownMenuItem disabled={!detalhe} onSelect={() => detalhe && setDuplicar(true)}>Duplicar perfil</DropdownMenuItem>
-            <DropdownMenuItem onSelect={abrirNovoRegistro}>Relacionar produto e cliente</DropdownMenuItem>
-            <DropdownMenuItem onSelect={abrirNovoRegistro}>Controlar prioridade</DropdownMenuItem>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(evento) => { if (focoDrawer) evento.preventDefault(); }}
+          >
+            <DropdownMenuItem onSelect={() => abrirNovoRegistro()}>Cadastrar operação</DropdownMenuItem>
+            <DropdownMenuItem disabled={!detalhe} onSelect={abrirDuplicar}>Duplicar perfil</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => abrirNovoRegistro('enq-prod')}>Relacionar produto e cliente</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => abrirNovoRegistro('enq-prioridade')}>Controlar prioridade</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </PageHeader>
@@ -370,8 +431,8 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         <input
           aria-label="Buscar"
           className="h-8 rounded-md border px-2 text-sm"
-          value={filtros.search}
-          onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: 1 }))}
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
         />
         <div className="grid gap-2 md:grid-cols-4">
           {comboBusca('Estabelecimento', 'filtro-estab', 'estabelecimentos', 'estabelecimentoId')}
@@ -409,7 +470,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
             onValidarPreCondicoes={() => void validarPreCondicoes()}
             onConsultar={() => void consultar()}
             onEditar={abrirEdicao}
-            onDuplicar={() => setDuplicar(true)}
+            onDuplicar={abrirDuplicar}
             onInativar={() => situacao('inativar')}
             onReativar={() => situacao('reativar')}
             onRemover={() => situacao('remover')}
@@ -418,25 +479,30 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       </section>
       <EnquadramentoDrawer
         aberto={drawer}
-        detalhe={editando ? detalhe : null}
+        detalhe={editando ? fichaEdicao : null}
         erro={erroDrawer}
         selecaoCodigo={selecaoCodigo}
+        focoInicial={focoDrawer}
+        removido={removidoEdicao}
+        conflito={conflitoDrawer}
+        onRecarregar={recarregarEdicao}
         onFechar={() => setDrawer(false)}
         onSalvar={salvar}
         onErro={setErroDrawer}
         onNovoCodigo={setCodigoTipo}
       />
       <DuplicarDialog
-        aberto={duplicar}
-        prioridadeOrigem={detalhe?.prioridade ?? 1}
+        aberto={alvoDuplicar !== null}
+        prioridadeOrigem={alvoDuplicar?.prioridade ?? 1}
         erro={erroDuplicar}
-        onFechar={() => { setDuplicar(false); setErroDuplicar(null); }}
+        onFechar={() => { setAlvoDuplicar(null); setErroDuplicar(null); }}
         onConfirmar={(corpo) => {
-          if (!detalhe) return;
-          const id = detalhe.id;
-          void enquadramentosApi.duplicar(id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao: detalhe.versao })
+          if (!alvoDuplicar) return;
+          // Versão capturada ao abrir o diálogo: se a ficha mudou desde então, o servidor responde 409.
+          const { id, versao } = alvoDuplicar;
+          void enquadramentosApi.duplicar(id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao })
             .then(() => atualizarApos(id))
-            .then(() => { setDuplicar(false); toast.success('Enquadramento salvo.'); })
+            .then(() => { setAlvoDuplicar(null); toast.success('Enquadramento salvo.'); })
             .catch((erro: unknown) => {
               if (erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE') void carregarFicha(id);
               setErroDuplicar(erro instanceof ErroEnquadramento ? (mensagemSobreposicao(erro) ?? erro.message) : 'Falha na operação.');

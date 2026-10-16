@@ -410,3 +410,173 @@ describe('máscara de CFOP, NCM e CEST', () => {
     expect(valorDe('Substituição tributária (CEST)')).toHaveTextContent('17.087.00');
   });
 });
+
+const INVISIVEL = '\u200B\u200C\u200D\uFEFF';
+
+describe('concorrência e respostas fora de ordem', () => {
+  it('resposta antiga da lista não sobrescreve linhas nem KPIs da mais nova', async () => {
+    renderizar();
+    await screen.findByText('Operação 01', { selector: 'td' });
+    const original = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+    const listas: Array<(r: Response) => void> = [];
+    const contagens: Array<(r: Response) => void> = [];
+    global.fetch = jest.fn((entrada: string, init?: RequestInit) => {
+      const url = new URL(String(entrada), 'http://localhost');
+      if ((init?.method ?? 'GET') === 'GET' && url.pathname === '/api/erp/fiscal/enquadramentos') {
+        return new Promise<Response>((r) => listas.push(r));
+      }
+      if ((init?.method ?? 'GET') === 'GET' && url.pathname === '/api/erp/fiscal/enquadramentos/contagens') {
+        return new Promise<Response>((r) => contagens.push(r));
+      }
+      return original(entrada, init);
+    }) as unknown as typeof fetch;
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    expect(listas).toHaveLength(2);
+    await act(async () => {
+      listas[1]!(json(200, { data: [linha(2)], total: 1, page: 1, pageSize: 20 }));
+      contagens[1]!(json(200, { total: 1, ativas: 1, inativas: 0 }));
+    });
+    expect(await screen.findByText('Operação 02', { selector: 'td' })).toBeInTheDocument();
+    await act(async () => {
+      listas[0]!(json(200, { data: [linha(7)], total: 77, page: 1, pageSize: 20 }));
+      contagens[0]!(json(200, { total: 77, ativas: 77, inativas: 0 }));
+    });
+    expect(screen.queryByText('Operação 07', { selector: 'td' })).not.toBeInTheDocument();
+    expect(screen.getByText('Operação 02', { selector: 'td' })).toBeInTheDocument();
+    expect(screen.queryByText('77')).not.toBeInTheDocument();
+  });
+
+  it('a busca por texto só consulta depois de uma pausa na digitação', async () => {
+    const { user } = renderizar();
+    await screen.findByText('Operação 01', { selector: 'td' });
+    await user.type(screen.getByLabelText('Buscar'), 'acem');
+    await waitFor(() => expect(listagens().at(-1)?.url.searchParams.get('search')).toBe('acem'));
+    const buscas = listagens().map((c) => c.url.searchParams.get('search') ?? '');
+    expect(buscas.filter((b) => b !== '')).toEqual(['acem']);
+  });
+});
+
+describe('duplicar perfil', () => {
+  async function abrirDuplicar(user: ReturnType<typeof userEvent.setup>) {
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Duplicar' }));
+    return screen.findByRole('dialog');
+  }
+
+  it('alteração da ficha por outro usuário não apaga o digitado e o envio usa a versão de quando abriu', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirDuplicar(user);
+    await user.type(within(dialogo).getByLabelText('Motivo da duplicação'), 'Copia para o fim do ano');
+    const prioridade = within(dialogo).getByLabelText('Prioridade da cópia');
+    await user.clear(prioridade);
+    await user.type(prioridade, '7');
+    detalhe = { ...detalhe, prioridade: 9, versao: 2 };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await waitFor(() => expect(chamadas.filter((c) => c.url.pathname.endsWith(`/${ENQ}`)).length).toBeGreaterThan(1));
+    expect(within(dialogo).getByLabelText('Motivo da duplicação')).toHaveValue('Copia para o fim do ano');
+    expect(within(dialogo).getByLabelText('Prioridade da cópia')).toHaveValue(7);
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/duplicar'))).toBe(true));
+    const envio = chamadas.find((c) => c.url.pathname.endsWith('/duplicar'))!;
+    expect(envio.corpo?.versao).toBe(1);
+    expect(envio.corpo?.prioridade).toBe(7);
+  });
+
+  it('motivo só com caracteres de largura zero é enviado normalizado', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirDuplicar(user);
+    await user.click(within(dialogo).getByLabelText('Motivo da duplicação'));
+    await user.paste(INVISIVEL);
+    await user.click(within(dialogo).getByRole('button', { name: 'Duplicar' }));
+    await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/duplicar'))).toBe(true));
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/duplicar'))!.corpo?.justificativa).toBe('');
+  });
+});
+
+describe('justificativa com largura zero', () => {
+  it('o diálogo de inativação recusa texto só com caracteres invisíveis', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Inativar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByLabelText(/Justificativa/));
+    await user.paste(INVISIVEL);
+    await user.click(within(dialogo).getByRole('button', { name: 'Inativar' }));
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(/Informe a justificativa/);
+    expect(chamadas.some((c) => c.url.pathname.endsWith('/inativar'))).toBe(false);
+  });
+
+  it('o drawer não aceita motivo só com caracteres invisíveis', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    await user.click(await screen.findByLabelText(/Motivo da alteração/));
+    await user.paste(INVISIVEL);
+    await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText(/Motivo da alteração \(3 a 500 caracteres\)/)).toBeInTheDocument();
+    expect(chamadas.some((c) => c.metodo === 'PATCH')).toBe(false);
+  });
+});
+
+describe('drawer com a ficha alterada por outro usuário', () => {
+  it('ficha removida mantém a edição bloqueada e nunca cai em criar', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    await user.type(await screen.findByLabelText(/Motivo da alteração/), 'Ajuste de prioridade');
+    const rota = `/api/erp/fiscal/enquadramentos/${ENQ}`;
+    const anterior = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+    global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
+      const url = new URL(String(entrada), 'http://localhost');
+      if (url.pathname === rota || url.pathname.startsWith(`${rota}/`)) {
+        return envelope(404, { message: 'Enquadramento não encontrado.', codigo: 'NAO_ENCONTRADO' });
+      }
+      return anterior(entrada, init);
+    }) as unknown as typeof fetch;
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    expect(await screen.findByText('Este registro foi removido por outro usuário.')).toBeInTheDocument();
+    expect(screen.getByText('Editar versão', { selector: '[data-slot="sheet-title"]' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(chamadas.some((c) => c.metodo === 'POST')).toBe(false);
+  });
+
+  it('409 oferece Recarregar dados: mantém o digitado, mostra o que mudou e reenvia com a versão nova', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    await user.type(await screen.findByLabelText(/Motivo da alteração/), 'Ajuste de prioridade');
+    detalhe = { ...detalhe, prioridade: 9, versao: 2 };
+    proximaMutacao = envelope(409, { message: 'conflito', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    await user.click(await screen.findByRole('button', { name: 'Recarregar dados' }));
+    expect(await screen.findByText(/Alterado por outro usuário: Prioridade/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Motivo da alteração/)).toHaveValue('Ajuste de prioridade');
+    proximaMutacao = null;
+    await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(chamadas.filter((c) => c.metodo === 'PATCH')).toHaveLength(2));
+    expect(chamadas.filter((c) => c.metodo === 'PATCH')[1]!.corpo?.versao).toBe(2);
+  });
+});
+
+describe('Ações do processo com foco no campo', () => {
+  async function abrirAcao(user: ReturnType<typeof userEvent.setup>, item: string) {
+    await user.click(await screen.findByRole('button', { name: /Ações do processo/ }));
+    await user.click(await screen.findByRole('menuitem', { name: item }));
+    await screen.findByRole('dialog');
+  }
+
+  it('Relacionar produto e cliente foca o campo Produto', async () => {
+    const { user } = renderizar();
+    await abrirAcao(user, 'Relacionar produto e cliente');
+    await waitFor(() => expect(document.getElementById('enq-prod')).toHaveFocus());
+  });
+
+  it('Controlar prioridade foca o campo Prioridade', async () => {
+    const { user } = renderizar();
+    await abrirAcao(user, 'Controlar prioridade');
+    await waitFor(() => expect(screen.getByLabelText('Prioridade')).toHaveFocus());
+  });
+});
