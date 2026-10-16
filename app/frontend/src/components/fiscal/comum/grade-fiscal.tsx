@@ -14,6 +14,8 @@ export interface ColunaGrade<L> {
   rotulo: string;
   celula: (linha: L) => ReactNode;
   className?: string;
+  /** Falso quando o servidor não ordena por esta coluna (por exemplo, Situação na T05). */
+  ordenavel?: boolean;
 }
 
 interface Props<L extends { id: string }> {
@@ -62,6 +64,7 @@ export function GradeFiscal<L extends { id: string }>({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               {colunas.map((coluna) => {
+                if (coluna.ordenavel === false) return <TableHead key={coluna.id}>{coluna.rotulo}</TableHead>;
                 const ativa = sort === coluna.id;
                 const Icone = !ativa ? ArrowUpDown : dir === 'asc' ? ArrowUp : ArrowDown;
                 return (

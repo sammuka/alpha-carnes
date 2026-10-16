@@ -1,200 +1,219 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { EmptyState } from '@/components/ui/empty-state';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { baixarArquivo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { rotuloData } from '@/lib/fiscal-enquadramentos';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   CHAVE_LISTA,
   FILTROS_LISTA,
+  SITUACOES,
+  TEXTO_PENDENTE,
   TEXTO_VAZIO,
+  ErroAcaoHomologacao,
   ErroHomologacao,
   homologacoesApi,
   mensagemDeHomologacao,
   type Contagens,
   type CorpoAbertura,
   type DetalheHomologacao,
-  type Diferenca,
   type EventoHistorico,
-  type FiltrosLista,
   type LinhaHomologacao,
   type PreCondicao,
 } from '@/lib/fiscal-homologacoes';
-import { AbasDetalhe } from './abas-detalhe';
-import { CenarioDialog } from './cenario-dialog';
-import { DecisaoDialog } from './decisao-dialog';
+import { GradeFiscal, type ColunaGrade } from '../comum/grade-fiscal';
+import { useFichaFiscal } from '../comum/use-ficha-fiscal';
+import { useListaFiscal } from '../comum/use-lista-fiscal';
+import { AbasDetalhe, podeDecidir, podePublicar, type IdAba } from './abas-detalhe';
+import { CenarioDialog, type AlvoCenario } from './cenario-dialog';
+import { DecisaoDialog, type DecisaoPendente } from './decisao-dialog';
 import { DiffDialog } from './diff-dialog';
-import { useRetornoFoco } from '../empresas/use-retorno-foco';
 import { HomologacaoDrawer } from './homologacao-drawer';
 
-function lerFiltros(): FiltrosLista {
-  if (typeof window === 'undefined') return FILTROS_LISTA;
-  try {
-    const bruto = window.sessionStorage.getItem(CHAVE_LISTA);
-    return bruto ? { ...FILTROS_LISTA, ...JSON.parse(bruto) as Partial<FiltrosLista> } : FILTROS_LISTA;
-  } catch {
-    return FILTROS_LISTA;
-  }
-}
+const COLUNAS: ColunaGrade<LinhaHomologacao>[] = [
+  { id: 'enquadramento', rotulo: 'Enquadramento fiscal', celula: (l) => l.enquadramento },
+  { id: 'vigenciaInicio', rotulo: 'Início de vigência', celula: (l) => rotuloData(l.vigenciaInicio) },
+  { id: 'situacao', rotulo: 'Situação', celula: (l) => l.situacao, ordenavel: false },
+  { id: 'usuario', rotulo: 'Usuário', celula: (l) => l.usuario },
+  { id: 'aprovador', rotulo: 'Responsável pela aprovação', celula: (l) => l.aprovador || TEXTO_PENDENTE },
+  { id: 'descricao', rotulo: 'Descrição', celula: (l) => l.descricao },
+];
+
+const MENSAGEM_NAO_ENCONTRADA = 'A homologação selecionada não está mais disponível.';
+const MENSAGEM_REMOVIDA = 'Esta homologação não está mais disponível. O que foi digitado continua aqui, mas não pode ser enviado.';
+
+/** Lê ficha e histórico juntos; função de módulo para manter a identidade estável. */
+const buscarFicha = (id: string): Promise<[DetalheHomologacao, EventoHistorico[]]> =>
+  Promise.all([homologacoesApi.obter(id), homologacoesApi.historico(id)]);
+
+const texto = (falha: unknown) => (falha instanceof Error ? falha.message : 'Falha na operação.');
 
 export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenciar: boolean; podeAprovar: boolean }) {
-  const [filtros, setFiltros] = useState<FiltrosLista>(lerFiltros);
-  const [linhas, setLinhas] = useState<LinhaHomologacao[]>([]);
-  const [contagens, setContagens] = useState<Contagens | null>(null);
-  const [carregando, setCarregando] = useState(true);
-  const [erroLista, setErroLista] = useState<string | null>(null);
-  const [detalhe, setDetalhe] = useState<DetalheHomologacao | null>(null);
-  const [historico, setHistorico] = useState<EventoHistorico[]>([]);
-  const [preCondicoes, setPreCondicoes] = useState<PreCondicao[]>([]);
-  const [alerta, setAlerta] = useState<string | null>(null);
-  const [errosCampo, setErrosCampo] = useState<Record<string, string>>({});
-  const [drawer, setDrawer] = useState(false);
-  const [acoes, setAcoes] = useState(false);
-  const [diffAberto, setDiffAberto] = useState(false);
-  const [diferencas, setDiferencas] = useState<Diferenca[]>([]);
-  const [decisaoAberta, setDecisaoAberta] = useState(false);
-  const [publicarAberto, setPublicarAberto] = useState(false);
-  const [justificativaPublicacao, setJustificativaPublicacao] = useState('Publicação com a memória desta versão.');
-  const [cenarioAberto, setCenarioAberto] = useState(false);
   const [recarga, setRecarga] = useState(0);
-  const retornoPublicar = useRetornoFoco(publicarAberto);
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    setErroLista(null);
-    try {
-      const [lista, totais] = await Promise.all([
-        homologacoesApi.listar(filtros),
-        homologacoesApi.contagens(filtros),
-      ]);
-      setLinhas(lista.data);
-      setContagens(totais);
-    } catch (erro) {
-      setErroLista(erro instanceof Error ? mensagemDeHomologacao(erro instanceof ErroHomologacao ? erro : new ErroHomologacao(erro.message, 500, null, {})) : 'Serviço indisponível no momento. Tente novamente.');
-    } finally {
-      setCarregando(false);
-    }
-  }, [filtros]);
-
-  useEffect(() => { void carregar(); }, [carregar, recarga]);
-  useEffect(() => { window.sessionStorage.setItem(CHAVE_LISTA, JSON.stringify(filtros)); }, [filtros]);
-  // O evento recarrega a lista e a ficha aberta (o handler lê a versão mais recente pela ref).
-  const aoEvento = useRef<() => void>(() => undefined);
-  useEffect(() => {
-    aoEvento.current = () => {
-      setRecarga((n) => n + 1);
-      if (detalhe) void recarregarFicha(detalhe.id);
-    };
+  const lista = useListaFiscal<typeof FILTROS_LISTA, LinhaHomologacao, Contagens>({
+    chave: CHAVE_LISTA,
+    padrao: FILTROS_LISTA,
+    listar: homologacoesApi.listar,
+    contagens: homologacoesApi.contagens,
+    recarga,
   });
+  const ficha = useFichaFiscal({ buscar: buscarFicha, recarga, mensagemNaoEncontrada: MENSAGEM_NAO_ENCONTRADA });
+  const { filtros, setFiltros } = lista;
+  const detalhe = ficha.detalhe;
+
+  const [aba, setAba] = useState<IdAba>('ficha');
+  const [preCondicoes, setPreCondicoes] = useState<PreCondicao[]>([]);
+  const [carregandoPreCondicoes, setCarregandoPreCondicoes] = useState(false);
+  const [erroPreCondicoes, setErroPreCondicoes] = useState<string | null>(null);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [erroHistorico, setErroHistorico] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState(false);
+  const [diffAberto, setDiffAberto] = useState(false);
+  /** Homologação e versão quando o diálogo de cenário abriu. */
+  const [alvoCenario, setAlvoCenario] = useState<(AlvoCenario & { id: string }) | null>(null);
+  const [decisao, setDecisao] = useState<(DecisaoPendente & { id: string }) | null>(null);
+
   useEffect(() => conectarRealtime({
     rooms: ['fiscal-homologacoes'],
-    onMessage: () => aoEvento.current(),
-    onReconnect: () => aoEvento.current(),
+    onMessage: () => setRecarga((n) => n + 1),
+    onReconnect: () => setRecarga((n) => n + 1),
   }), []);
 
-  async function recarregarFicha(id: string) {
+  /** Lista e ficha abertas com o que está gravado; termina antes de a tela aceitar a próxima ação. */
+  async function atualizarApos(id: string) {
+    await Promise.all([lista.carregar(), ficha.carregar(id)]);
+  }
+
+  /** Executa a ação do servidor; a falha segue ao diálogo com o texto da tela e a marca de conflito. */
+  async function executar(id: string, chamada: () => Promise<unknown>, sucesso: string) {
     try {
-      const [ficha, eventos] = await Promise.all([homologacoesApi.obter(id), homologacoesApi.historico(id)]);
-      setDetalhe((atual) => (atual?.id === id ? ficha : atual));
-      setHistorico(eventos);
+      await chamada();
     } catch (erro) {
-      registrar(erro);
+      if (erro instanceof ErroHomologacao) {
+        throw new ErroAcaoHomologacao(mensagemDeHomologacao(erro), erro.codigo === 'CONFLITO_CONCORRENTE');
+      }
+      throw erro;
+    }
+    toast.success(sucesso);
+    await atualizarApos(id);
+  }
+
+  async function exportar() {
+    try {
+      baixarArquivo(await homologacoesApi.exportar({ ...filtros, search: lista.busca }), 'homologacoes.csv');
+    } catch (erro) {
+      toast.error(texto(erro));
     }
   }
 
-  function registrar(erro: unknown): string {
-    if (!(erro instanceof ErroHomologacao)) return 'Falha na operação.';
-    const texto = mensagemDeHomologacao(erro);
-    setErrosCampo(erro.porCampo);
-    setAlerta(texto);
-    return texto;
+  function selecionar(id: string) {
+    setPreCondicoes([]);
+    setErroPreCondicoes(null);
+    setErroHistorico(null);
+    setAba('ficha');
+    ficha.selecionar(id);
   }
 
-  async function selecionar(id: string) {
-    setAlerta(null);
-    try {
-      const [ficha, eventos] = await Promise.all([homologacoesApi.obter(id), homologacoesApi.historico(id)]);
-      setDetalhe(ficha);
-      setHistorico(eventos);
-    } catch (erro) {
-      registrar(erro);
-    }
-  }
-
-  async function salvar(corpo: CorpoAbertura) {
+  async function salvar(corpo: CorpoAbertura): Promise<FalhaSalvar | null> {
     try {
       const criada = await homologacoesApi.criar(corpo);
       toast.success('Revisão aberta.');
       setDrawer(false);
-      setErrosCampo({});
-      setRecarga((n) => n + 1);
-      await selecionar(criada.id);
+      await lista.carregar();
+      selecionar(criada.id);
+      return null;
     } catch (erro) {
-      registrar(erro);
+      if (erro instanceof ErroHomologacao) return { mensagem: mensagemDeHomologacao(erro), porCampo: erro.porCampo };
+      return { mensagem: 'Falha na operação.', porCampo: {} };
     }
   }
 
-  async function abrirDiff() {
+  function abrirDecisao() {
     if (!detalhe) return;
+    const { id, versao } = detalhe;
+    setDecisao({
+      id,
+      titulo: 'Aprovar/rejeitar',
+      versao,
+      recarregar: () => recarregarVersao(id),
+      acoes: [
+        {
+          rotulo: 'Aprovar',
+          executar: (justificativa, vigente) => executar(id, () => homologacoesApi.aprovar(id, { versao: vigente, justificativa }), 'Homologação aprovada.'),
+        },
+        {
+          rotulo: 'Rejeitar',
+          perigosa: true,
+          executar: (justificativa, vigente) => executar(id, () => homologacoesApi.rejeitar(id, { versao: vigente, justificativa }), 'Homologação rejeitada.'),
+        },
+      ],
+    });
+  }
+
+  function abrirPublicacao() {
+    if (!detalhe) return;
+    const { id, versao } = detalhe;
+    setDecisao({
+      id,
+      titulo: 'Publicar e auditar',
+      versao,
+      recarregar: () => recarregarVersao(id),
+      acoes: [{
+        rotulo: 'Publicar',
+        executar: (justificativa, vigente) => executar(id, () => homologacoesApi.publicar(id, { versao: vigente, justificativa }), 'Homologação publicada.'),
+      }],
+    });
+  }
+
+  /** Relê a homologação após um 409 e devolve a versão nova, ou `null` se ela não existe mais. */
+  async function recarregarVersao(id: string): Promise<number | null> {
+    const fresca = await ficha.carregar(id);
+    return fresca ? fresca.versao : null;
+  }
+
+  function abrirCenarios() {
+    if (detalhe) setAlvoCenario({ id: detalhe.id, regraId: detalhe.regraId, versao: detalhe.versao });
+  }
+
+  async function validarPreCondicoes() {
+    if (!detalhe) return;
+    setCarregandoPreCondicoes(true);
+    setErroPreCondicoes(null);
     try {
-      const diff = await homologacoesApi.diff(detalhe.id);
-      setDiferencas(diff.diferencas ?? []);
-      setDiffAberto(true);
+      setPreCondicoes(await homologacoesApi.preCondicoes(detalhe.id));
     } catch (erro) {
-      registrar(erro);
+      setPreCondicoes([]);
+      setErroPreCondicoes(texto(erro));
+    } finally {
+      setCarregandoPreCondicoes(false);
     }
   }
 
-  async function decidir(acao: 'aprovar' | 'rejeitar', justificativa: string) {
+  async function consultarHistorico() {
+    setAba('historico');
     if (!detalhe) return;
+    setCarregandoHistorico(true);
+    setErroHistorico(null);
     try {
-      const atualizado = acao === 'aprovar'
-        ? await homologacoesApi.aprovar(detalhe.id, { versao: detalhe.versao, justificativa })
-        : await homologacoesApi.rejeitar(detalhe.id, { versao: detalhe.versao, justificativa });
-      setDetalhe(atualizado);
-      setDecisaoAberta(false);
-      setAlerta(null);
-      setRecarga((n) => n + 1);
+      ficha.setHistorico(await homologacoesApi.historico(detalhe.id));
     } catch (erro) {
-      registrar(erro);
+      setErroHistorico(texto(erro));
+    } finally {
+      setCarregandoHistorico(false);
     }
   }
 
-  async function publicar() {
-    if (!detalhe) return;
-    try {
-      const atualizado = await homologacoesApi.publicar(detalhe.id, { versao: detalhe.versao, justificativa: justificativaPublicacao });
-      setDetalhe(atualizado);
-      setPublicarAberto(false);
-      setAlerta(null);
-      toast.success('Homologação publicada.');
-      const eventos = await homologacoesApi.historico(detalhe.id);
-      setHistorico(eventos);
-      setRecarga((n) => n + 1);
-    } catch (erro) {
-      registrar(erro);
-    }
-  }
-
-  async function vincular(simulacaoId: string, justificativa: string) {
-    if (!detalhe) return;
-    try {
-      const atualizado = await homologacoesApi.vincular(detalhe.id, { simulacaoId, versao: detalhe.versao, justificativa });
-      setDetalhe(atualizado);
-      setCenarioAberto(false);
-      setAlerta(null);
-      setRecarga((n) => n + 1);
-    } catch (erro) {
-      registrar(erro);
-    }
-  }
+  const situacao = detalhe?.situacao ?? '';
+  /** Outro usuário removeu a homologação enquanto o diálogo estava aberto. */
+  const decisaoRemovida = decisao !== null && detalhe?.id !== decisao.id;
+  const cenarioRemovido = alvoCenario !== null && detalhe?.id !== alvoCenario.id;
 
   return (
     <div className="grid gap-4">
@@ -207,100 +226,115 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
             <BadgeProvisorio codigo="H-E01-12" />
           </span>
         )}
+        live
       >
-        <Button type="button" variant="secondary" onClick={() => { window.location.href = '/api/erp/fiscal/homologacoes/exportacao'; }}>Exportar</Button>
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
         {podeGerenciar && <Button type="button" onClick={() => setDrawer(true)}>+ Novo registro</Button>}
-        <Button type="button" variant="secondary" aria-expanded={acoes} onClick={() => setAcoes((atual) => !atual)}>Ações do processo ▾</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" aria-haspopup="menu">Ações do processo <ChevronDown aria-hidden="true" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem disabled={!detalhe} onSelect={() => setDiffAberto(true)}>Revisar diff</DropdownMenuItem>
+            {podeAprovar && <DropdownMenuItem disabled={!detalhe || !podeDecidir(situacao)} onSelect={abrirDecisao}>Aprovar/rejeitar</DropdownMenuItem>}
+            {podeAprovar && <DropdownMenuItem disabled={!detalhe || !podePublicar(situacao)} onSelect={abrirPublicacao}>Publicar e auditar</DropdownMenuItem>}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </PageHeader>
-      {acoes && (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" disabled={!detalhe} onClick={() => void abrirDiff()}>Revisar diff</Button>
-          {podeAprovar && <Button type="button" variant="secondary" disabled={!detalhe} onClick={() => setDecisaoAberta(true)}>Aprovar/rejeitar</Button>}
-          {podeAprovar && <Button type="button" variant="secondary" disabled={!detalhe} onClick={() => setPublicarAberto(true)}>Publicar e auditar</Button>}
-        </div>
-      )}
       <KpiStrip>
-        <Kpi label="Em revisão" value={contagens?.emRevisao ?? 0} />
-        <Kpi label="Aprovadas" value={contagens?.aprovadas ?? 0} />
-        <Kpi label="Rejeitadas" value={contagens?.rejeitadas ?? 0} />
-        <Kpi label="Publicadas" value={contagens?.publicadas ?? 0} />
+        <Kpi label="Em revisão" value={lista.contagens?.emRevisao ?? '—'} />
+        <Kpi label="Aprovadas" value={lista.contagens?.aprovadas ?? '—'} />
+        <Kpi label="Rejeitadas" value={lista.contagens?.rejeitadas ?? '—'} />
+        <Kpi label="Publicadas" value={lista.contagens?.publicadas ?? '—'} />
       </KpiStrip>
-      <div className="flex flex-wrap gap-2">
-        <input aria-label="Pesquisar descrição ou referência de negócio" placeholder="Pesquisar descrição ou referência de negócio" className="h-8 rounded-md border px-2" value={filtros.search} onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: '1' }))} />
-        <select aria-label="Situação" className="h-8 rounded-md border px-2" value={filtros.situacao} onChange={(e) => setFiltros((atual) => ({ ...atual, situacao: e.target.value, page: '1' }))}>
-          <option value="">Situação</option>
-          <option value="EM_REVISAO">Em revisão</option>
-          <option value="APROVADA">Aprovada</option>
-          <option value="REJEITADA">Rejeitada</option>
-          <option value="PUBLICADA">Publicada</option>
-        </select>
-        <Button type="button" variant="secondary" onClick={() => { window.location.href = '/api/erp/fiscal/homologacoes/exportacao'; }}>Exportar visão</Button>
-      </div>
-      {erroLista && (
-        <p role="alert" className="text-sm text-destructive">
-          {erroLista} <Button type="button" variant="secondary" onClick={() => setRecarga((n) => n + 1)}>Tentar novamente</Button>
-        </p>
-      )}
-      {carregando ? <Skeleton className="h-40 w-full" /> : linhas.length === 0 ? (
-        <EmptyState title={TEXTO_VAZIO} />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Enquadramento fiscal</TableHead>
-              <TableHead>Início de vigência</TableHead>
-              <TableHead>Situação</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Responsável pela aprovação</TableHead>
-              <TableHead>Descrição</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {linhas.map((linha) => (
-              <TableRow key={linha.id} tabIndex={0} onClick={() => void selecionar(linha.id)} onKeyDown={(e) => { if (e.key === 'Enter') void selecionar(linha.id); }}>
-                <TableCell>{linha.enquadramento}</TableCell>
-                <TableCell>{linha.vigenciaInicio}</TableCell>
-                <TableCell>{linha.situacao}</TableCell>
-                <TableCell>{linha.usuario}</TableCell>
-                <TableCell>{linha.aprovador}</TableCell>
-                <TableCell>{linha.descricao}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-      {alerta && <p role="alert" className="text-sm text-destructive">{alerta}</p>}
-      {detalhe && (
-        <AbasDetalhe
-          detalhe={detalhe}
-          historico={historico}
-          preCondicoes={preCondicoes}
-          podeGerenciar={podeGerenciar}
-          onCenarios={() => setCenarioAberto(true)}
-          onValidar={() => { void homologacoesApi.preCondicoes(detalhe.id).then(setPreCondicoes).catch(registrar); }}
-          onHistorico={() => { void homologacoesApi.historico(detalhe.id).then(setHistorico).catch(registrar); }}
+      <section className="grid gap-3">
+        <h2 className="text-sm font-semibold">Registros e consultas</h2>
+        <div className="flex flex-wrap gap-2">
+          <input
+            aria-label="Pesquisar descrição ou referência de negócio"
+            placeholder="Pesquisar descrição ou referência de negócio"
+            className="h-8 min-w-64 rounded-md border px-2 text-sm"
+            value={lista.busca}
+            onChange={(e) => lista.setBusca(e.target.value)}
+          />
+          <select
+            aria-label="Situação"
+            className="h-8 rounded-md border px-2 text-sm"
+            value={filtros.situacao}
+            onChange={(e) => setFiltros((atual) => ({ ...atual, situacao: e.target.value, page: 1 }))}
+          >
+            <option value="">Todos</option>
+            {SITUACOES.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+          </select>
+          <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
+        </div>
+        <GradeFiscal
+          colunas={COLUNAS}
+          linhas={lista.linhas}
+          total={lista.total}
+          pageSize={lista.pageSize}
+          carregando={lista.carregando}
+          erro={lista.erro}
+          sort={filtros.sort}
+          dir={filtros.dir}
+          page={filtros.page}
+          selecionadoId={ficha.selecionadoId}
+          textoVazio={TEXTO_VAZIO}
+          onSelecionar={selecionar}
+          onOrdenar={lista.ordenar}
+          onPagina={(page) => setFiltros((atual) => ({ ...atual, page }))}
+          onTentarNovamente={() => setRecarga((n) => n + 1)}
         />
-      )}
-      <HomologacaoDrawer aberto={drawer} erro={alerta} errosCampo={errosCampo} onFechar={() => setDrawer(false)} onSalvar={(corpo) => void salvar(corpo)} />
-      <DiffDialog aberto={diffAberto} diferencas={diferencas} onFechar={() => setDiffAberto(false)} />
-      <DecisaoDialog aberto={decisaoAberta} erro={alerta} onFechar={() => setDecisaoAberta(false)} onAprovar={(justificativa) => void decidir('aprovar', justificativa)} onRejeitar={(justificativa) => void decidir('rejeitar', justificativa)} />
-      <CenarioDialog aberto={cenarioAberto} enquadramento={detalhe?.enquadramento ?? ''} erro={alerta} onFechar={() => setCenarioAberto(false)} onVincular={(id, justificativa) => void vincular(id, justificativa)} />
-      <Dialog open={publicarAberto} onOpenChange={(aberto) => { if (!aberto) setPublicarAberto(false); }}>
-        <DialogContent onCloseAutoFocus={retornoPublicar}>
-          <DialogHeader>
-            <DialogTitle>Publicar e auditar</DialogTitle>
-          </DialogHeader>
-          <label className="grid gap-1 text-xs" htmlFor="justificativa-publicacao">
-            Justificativa auditável
-            <textarea id="justificativa-publicacao" className="min-h-20 rounded-md border px-2 py-1" value={justificativaPublicacao} onChange={(e) => setJustificativaPublicacao(e.target.value)} />
-          </label>
-          {alerta && <p role="alert" className="text-sm text-destructive">{alerta}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => void publicar()}>Publicar</Button>
-            <Button type="button" variant="secondary" onClick={() => setPublicarAberto(false)}>Cancelar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      </section>
+      <section className="grid gap-2">
+        <h2 className="text-sm font-semibold">Detalhamento e execução</h2>
+        {ficha.erro && <p role="alert" className="text-sm text-destructive">{ficha.erro}</p>}
+        {ficha.selecionadoId && (
+          <AbasDetalhe
+            detalhe={detalhe}
+            carregandoFicha={ficha.carregando}
+            podeGerenciar={podeGerenciar}
+            podeAprovar={podeAprovar}
+            aba={aba}
+            onAba={setAba}
+            historico={ficha.historico}
+            carregandoHistorico={carregandoHistorico}
+            erroHistorico={erroHistorico}
+            preCondicoes={preCondicoes}
+            carregandoPreCondicoes={carregandoPreCondicoes}
+            erroPreCondicoes={erroPreCondicoes}
+            onCenarios={abrirCenarios}
+            onRevisarDiff={() => setDiffAberto(true)}
+            onDecidir={abrirDecisao}
+            onPublicar={abrirPublicacao}
+            onValidarPreCondicoes={() => void validarPreCondicoes()}
+            onConsultarHistorico={() => void consultarHistorico()}
+          />
+        )}
+      </section>
+      <HomologacaoDrawer aberto={drawer} onFechar={() => setDrawer(false)} onSalvar={salvar} />
+      <DiffDialog
+        aberto={diffAberto}
+        carregar={async () => (detalhe ? (await homologacoesApi.diff(detalhe.id)).diferencas ?? [] : [])}
+        onFechar={() => setDiffAberto(false)}
+      />
+      <DecisaoDialog decisao={decisao} bloqueado={decisaoRemovida ? MENSAGEM_REMOVIDA : null} onFechar={() => setDecisao(null)} />
+      <CenarioDialog
+        aberto={alvoCenario !== null}
+        alvo={alvoCenario}
+        bloqueado={cenarioRemovido ? MENSAGEM_REMOVIDA : null}
+        onFechar={() => setAlvoCenario(null)}
+        onRecarregar={() => (alvoCenario ? recarregarVersao(alvoCenario.id) : Promise.resolve(null))}
+        onVincular={async (simulacaoId, justificativa, versao) => {
+          if (!alvoCenario) return;
+          await executar(
+            alvoCenario.id,
+            () => homologacoesApi.vincular(alvoCenario.id, { simulacaoId, versao, justificativa }),
+            'Cenário vinculado.',
+          );
+          setAlvoCenario(null);
+        }}
+      />
     </div>
   );
 }
