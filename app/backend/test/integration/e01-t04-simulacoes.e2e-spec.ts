@@ -650,7 +650,7 @@ describe('E01-T04 simulações fiscais', () => {
     const comNulo = await request(app.getHttpServer())
       .get('/fiscal/simulacoes').query({ search: 'a\u0000b' }).set('Cookie', admin);
     expect(comNulo.status).toBe(400);
-    // % _ e  da busca são literais ignorados, nunca curinga nem escape do LIKE.
+    // % _ e \ da busca são literais ignorados, nunca curinga nem escape do LIKE.
     const curinga = await request(app.getHttpServer())
       .get('/fiscal/simulacoes').query({ search: 'A_ougue', regraId: aprovada.regraId }).set('Cookie', admin);
     expect(curinga.status).toBe(200);
