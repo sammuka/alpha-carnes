@@ -605,4 +605,181 @@ describe('entrada inválida responde 400 e não grava', () => {
       expect(res.text).not.toMatch(/LIQUIDACAO-|[0-9a-f]{8}-[0-9a-f]{4}-/);
     });
   });
+
+  describe('ramos do serviço de políticas', () => {
+    const ESPERADO = (message: string, codigo: string, status: number) => ({ status, response: { message, codigo } });
+
+    it('validar devolve válido quando contas e centro existem e o evento é novo', async () => {
+      await prepararContasAnaliticas();
+      expect(await service.validar(dtoConfigurar())).toEqual({ valido: true, mensagens: [] });
+    });
+
+    it('validar acumula evento duplicado e mapeamentos ausentes de débito, crédito e centro', async () => {
+      await prepararContasAnaliticas();
+      await service.configurar(dtoConfigurar(), autorId);
+      const resultado = await service.validar(dtoConfigurar({
+        contaDebitoCodigo: 'x1', contaCreditoCodigo: 'x2', centroCodigo: 'CTX',
+      }));
+      expect(resultado.valido).toBe(false);
+      expect(resultado.mensagens).toEqual(['evento duplicado', 'mapeamento ausente', 'mapeamento ausente', 'mapeamento ausente']);
+    });
+
+    it('configurar recusa justificativa em branco, centro inexistente e evento duplicado', async () => {
+      await prepararContasAnaliticas();
+      await expect(service.configurar(dtoConfigurar({ justificativa: '   ' }), autorId))
+        .rejects.toMatchObject(ESPERADO('Informe justificativa para auditoria.', 'LIQUIDACAO-2026-10', 422));
+      await expect(service.configurar(dtoConfigurar({ centroCodigo: 'CTX' }), autorId))
+        .rejects.toMatchObject(ESPERADO('mapeamento ausente', 'LIQUIDACAO-2026-10', 422));
+      await service.configurar(dtoConfigurar(), autorId);
+      await expect(service.configurar(dtoConfigurar(), autorId))
+        .rejects.toMatchObject(ESPERADO('evento duplicado', 'LIQUIDACAO-2026-10', 409));
+      expect(await db.select().from(politicasContabilizacao)).toHaveLength(1);
+    });
+
+    it('editar grava a nova versão da mesma política e registra no histórico', async () => {
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      const editada = await service.editar(politica.codigo, {
+        numero: 1, contaDebitoCodigo: '2.1.01', contaCreditoCodigo: '1.1.01', centroCodigo: 'CT1',
+        vigenciaInicio: '2026-10-02', justificativa: 'inverte as contas',
+      }, autorId);
+      expect(editada.contaDebitoCodigo).toBe('2.1.01');
+      expect(editada.contaCreditoCodigo).toBe('1.1.01');
+      expect(editada.situacao).toBe('DRAFT');
+      const historico = await service.historico(politica.codigo);
+      expect(historico.map((h) => h.acontecimento)).toEqual(['Editar versão', 'Configurar mappings']);
+      expect(historico[0]?.justificativa).toBe('inverte as contas');
+    });
+
+    it('editar recusa origem alterada, justificativa em branco, número antigo e versão que não é rascunho', async () => {
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      const base = {
+        numero: 1, contaDebitoCodigo: '1.1.01', contaCreditoCodigo: '2.1.01', centroCodigo: 'CT1',
+        vigenciaInicio: '2026-10-01', justificativa: 'edita',
+      };
+      await expect(service.editar(politica.codigo, { ...base, tipoEvento: 'TARIFA' }, autorId))
+        .rejects.toMatchObject(ESPERADO('origem imutável', politica.codigo, 422));
+      await expect(service.editar(politica.codigo, { ...base, competencia: '2026-11' }, autorId))
+        .rejects.toMatchObject(ESPERADO('origem imutável', politica.codigo, 422));
+      await expect(service.editar(politica.codigo, { ...base, justificativa: ' ' }, autorId))
+        .rejects.toMatchObject(ESPERADO('Informe justificativa para auditoria.', politica.codigo, 422));
+      await expect(service.editar(politica.codigo, { ...base, numero: 2 }, autorId))
+        .rejects.toMatchObject(ESPERADO('conflito concorrente', politica.codigo, 409));
+      await expect(service.editar('NAO-EXISTE', base, autorId)).rejects.toMatchObject({ status: 404 });
+      await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
+      await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+      await expect(service.editar(politica.codigo, base, autorId))
+        .rejects.toMatchObject(ESPERADO('conflito concorrente', politica.codigo, 409));
+    });
+
+    it('simular e aprovar recusam justificativa em branco; aprovar sem simulação dá mapeamento ausente', async () => {
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await expect(service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: ' ' }, autorId))
+        .rejects.toMatchObject(ESPERADO('Informe justificativa para auditoria.', politica.codigo, 422));
+      await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: ' ' }, outraPessoaId))
+        .rejects.toMatchObject(ESPERADO('Informe justificativa para auditoria.', politica.codigo, 422));
+      await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
+        .rejects.toMatchObject(ESPERADO('mapeamento ausente', politica.codigo, 422));
+      await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, autorId))
+        .rejects.toMatchObject(ESPERADO('aprovador diferente do autor', politica.codigo, 422));
+      expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+    });
+
+    it('simular aceita versão aprovada, recusa versão em revisão e aprovar recusa o que não é rascunho', async () => {
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
+      await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+      const reexecutada = await service.simular(politica.codigo, { numero: 1, valor: '20.50', justificativa: 'nova simulação' }, autorId);
+      expect(reexecutada.simulacaoValor).toBe('20.50');
+      expect(reexecutada.situacao).toBe('APPROVED');
+      await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'de novo' }, outraPessoaId))
+        .rejects.toMatchObject(ESPERADO('conflito concorrente', politica.codigo, 409));
+      await db.execute(sql`update politica_versoes set situacao = 'REVIEW' where numero = 1`);
+      await expect(service.simular(politica.codigo, { numero: 1, valor: '1.00', justificativa: 'simula' }, autorId))
+        .rejects.toMatchObject(ESPERADO('conflito concorrente', politica.codigo, 409));
+    });
+
+    it('historico recusa política inexistente e devolve simulação e aprovação em ordem do mais novo', async () => {
+      await expect(service.historico('NAO-EXISTE')).rejects.toMatchObject({ status: 404 });
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
+      await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+      const historico = await service.historico(politica.codigo);
+      expect(historico.map((h) => h.acontecimento)).toEqual(['Aprovar regra', 'Simular evento', 'Configurar mappings']);
+      expect(historico.every((h) => h.quem !== '' && h.quando !== '')).toBe(true);
+    });
+
+    it('lote simula e aprova várias políticas, e recusa sem número ou sem valor', async () => {
+      await prepararContasAnaliticas();
+      const a = await service.configurar(dtoConfigurar({ competencia: '2026-10' }), autorId);
+      const b = await service.configurar(dtoConfigurar({ competencia: '2026-11' }), autorId);
+      const numeroPorCodigo = { [a.codigo]: 1, [b.codigo]: 1 };
+      await expect(service.lote({ acao: 'simular', codigos: [a.codigo, b.codigo], justificativa: 'j', numeroPorCodigo }, autorId))
+        .rejects.toMatchObject(ESPERADO('Valor é obrigatório.', a.codigo, 422));
+      await expect(service.lote({ acao: 'aprovar', codigos: [b.codigo, a.codigo], justificativa: 'j', numeroPorCodigo: { [a.codigo]: 1 } }, outraPessoaId))
+        .rejects.toMatchObject(ESPERADO('conflito concorrente', b.codigo, 409));
+      expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+      const simuladas = await service.lote({ acao: 'simular', codigos: [a.codigo, b.codigo], justificativa: 'j', numeroPorCodigo, valor: '5.00' }, autorId);
+      expect(simuladas).toEqual([
+        { codigo: a.codigo, acao: 'simular', situacao: 'DRAFT' },
+        { codigo: b.codigo, acao: 'simular', situacao: 'DRAFT' },
+      ]);
+      const aprovadas = await service.lote({ acao: 'aprovar', codigos: [a.codigo, b.codigo], justificativa: 'j', numeroPorCodigo }, outraPessoaId);
+      expect(aprovadas.map((e) => e.situacao)).toEqual(['APPROVED', 'APPROVED']);
+      expect((await service.obter(b.codigo)).situacao).toBe('APPROVED');
+    });
+
+    it('listar filtra por situação, competência e texto e ordena por cada coluna nos dois sentidos', async () => {
+      await prepararContasAnaliticas();
+      await service.configurar(dtoConfigurar({ competencia: '2026-10' }), autorId);
+      const b = await service.configurar(dtoConfigurar({ competencia: '2026-11', tipoEvento: 'TARIFA' }), autorId);
+      await service.simular(b.codigo, { numero: 1, valor: '1.00', justificativa: 's' }, autorId);
+      await service.aprovar(b.codigo, { numero: 1, justificativa: 'a' }, outraPessoaId);
+      const base = { pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' } as const;
+      expect((await service.listar({ ...base, situacao: 'APPROVED' })).itens.map((i) => i.codigo)).toEqual(['TARIFA-2026-11']);
+      expect((await service.listar({ ...base, competencia: '2026-10' })).total).toBe(1);
+      expect((await service.listar({ ...base, q: 'caixa' })).total).toBe(2);
+      expect((await service.listar({ ...base, q: 'Tarifa' })).itens.map((i) => i.codigo)).toEqual(['TARIFA-2026-11']);
+      expect((await service.listar({ ...base, q: 'nada-disso' })).total).toBe(0);
+      for (const ordenar of ['competencia', 'contaDebito', 'contaCredito', 'centroCusto', 'tipoEvento'] as const) {
+        const crescente = (await service.listar({ ...base, ordenar })).itens.map((i) => i.codigo);
+        const decrescente = (await service.listar({ ...base, ordenar, direcao: 'desc' })).itens.map((i) => i.codigo);
+        expect(crescente).toHaveLength(2);
+        if (ordenar === 'competencia' || ordenar === 'tipoEvento') expect(decrescente).toEqual([...crescente].reverse());
+      }
+      await expect(service.obter('NAO-EXISTE')).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('conta com vigência encerrada não mapeia, e o histórico cai na operação quando a auditoria não traz a ação', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    await db.execute(sql`
+      insert into auditoria (tabela, registro_id, operacao, modulo, usuario_id, dados_novos, justificativa)
+      select 'politica_versoes', v.id, 'ACAO_MANUAL', 'contabilidade.politicas', ${autorId}, '{"acao":"desconhecida"}'::jsonb, 'sem rótulo'
+        from politica_versoes v
+    `);
+    await db.execute(sql`
+      insert into auditoria (tabela, registro_id, operacao, modulo, usuario_id, dados_novos, justificativa)
+      select 'politica_versoes', v.id, 'UPDATE', 'contabilidade.politicas', ${autorId}, '{}'::jsonb, 'sem dados'
+        from politica_versoes v
+    `);
+    const acontecimentos = (await service.historico(politica.codigo)).map((h) => h.acontecimento);
+    expect(acontecimentos).toEqual(expect.arrayContaining(['ACAO_MANUAL', 'UPDATE', 'Configurar mappings']));
+    await db.execute(sql`update conta_versoes v set vigencia_fim = '2020-01-01', vigencia_inicio = '2019-01-01'
+      from contas_contabeis c where c.id = v.conta_id and c.codigo = '1.1.01'`);
+    await expect(service.configurar(dtoConfigurar({ competencia: '2026-12' }), autorId))
+      .rejects.toMatchObject(ESPERADO('mapeamento ausente', 'LIQUIDACAO-2026-12', 422));
+  });
+
+  it('opções devolvem contas analíticas vigentes e centros', async () => {
+      await prepararContasAnaliticas();
+      const opcoes = await service.listarOpcoes();
+      expect(opcoes.contas.map((c) => c.codigo)).toEqual(['1.1.01', '2.1.01']);
+      expect(opcoes.centros.map((c) => c.codigo)).toEqual(['CT1']);
+    });
+  });
 });
