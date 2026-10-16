@@ -466,8 +466,10 @@ export class SimulacoesFiscaisService {
       query.codigo ? eq(simulacoesFiscais.codigo, query.codigo) : undefined,
       query.regraId ? eq(simulacoesFiscais.regraId, query.regraId) : undefined,
     ];
-    if (query.search?.trim()) {
-      const termo = `%${query.search.trim()}%`;
+    // Os caracteres % _ e barra invertida são descartados: nunca curinga nem escape do LIKE (mesmo critério de regras e homologações).
+    const busca = query.search?.replace(/[%_\\]/g, '').trim();
+    if (busca) {
+      const termo = `%${busca}%`;
       filtros.push(or(
         sql`${nomeClienteSql()} ILIKE ${termo}`,
         ilike(clientes.razaoSocial, termo),

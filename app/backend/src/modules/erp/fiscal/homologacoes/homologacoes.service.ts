@@ -622,7 +622,7 @@ export class HomologacoesService {
   }
 
   private whereLista(query: ListarHomologacoesQuery) {
-    const termo = query.search?.replace(/[%_]/g, '');
+    const termo = query.search?.replace(/[%_\\]/g, '');
     return and(
       isNull(homologacoesRegras.deletedAt),
       query.situacao ? eq(homologacoesRegras.situacao, query.situacao) : undefined,

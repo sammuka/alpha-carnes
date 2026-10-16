@@ -650,6 +650,15 @@ describe('E01-T04 simulações fiscais', () => {
     const comNulo = await request(app.getHttpServer())
       .get('/fiscal/simulacoes').query({ search: 'a\u0000b' }).set('Cookie', admin);
     expect(comNulo.status).toBe(400);
+    // % _ e  da busca são literais ignorados, nunca curinga nem escape do LIKE.
+    const curinga = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'A_ougue', regraId: aprovada.regraId }).set('Cookie', admin);
+    expect(curinga.status).toBe(200);
+    expect(curinga.body.total).toBe(0);
+    const barra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'Açougue\\', regraId: aprovada.regraId }).set('Cookie', admin);
+    expect(barra.status).toBe(200);
+    expect((barra.body.data as { id: string }[]).map((l) => l.id)).toContain(criada.body.id);
   });
   it('competência anterior ao enquadramento não grava', async () => {
     const aprovada = await aprovarRegra(await cenario({ inicio: '2026-06-01' }));
