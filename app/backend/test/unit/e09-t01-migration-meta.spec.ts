@@ -16,10 +16,14 @@ describe('migration do plano de contas (E09-T01)', () => {
     expect(tags).toContain('0048_e01_t05_homologacoes_regras');
   });
 
-  it('idx do journal é crescente e sem repetição, e a tag 0049 é a última', () => {
+  it('idx do journal é crescente e sem repetição, e a tag 0049 está no idx 49 seguida só de ordinais maiores', () => {
     const idxs = journal.entries.map((e) => e.idx);
     expect(idxs).toEqual([...new Set(idxs)].sort((a, b) => a - b));
-    expect(journal.entries.at(-1)?.tag).toBe('0049_e09_t01_plano_contas');
+    const posicao = journal.entries.findIndex((e) => e.tag === '0049_e09_t01_plano_contas');
+    expect(journal.entries[posicao]?.idx).toBe(49);
+    for (const posterior of journal.entries.slice(posicao + 1)) {
+      expect(Number(posterior.tag.slice(0, 4))).toBeGreaterThan(49);
+    }
   });
 
   it('arquivos coincidem com a tag e o SQL mantém tabelas e triggers', () => {
