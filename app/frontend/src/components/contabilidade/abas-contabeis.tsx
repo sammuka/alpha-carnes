@@ -23,6 +23,14 @@ const ACEITE = [
   'Integrações e batch possuem evidência de contrato, sandbox e rastreabilidade',
 ];
 
+/**
+ * Parágrafo do modal "Ação do domínio" (`aplicacao.js` L401). Sai só a cláusula da casca de protótipo
+ * ("e não é efetuada no protótipo"), Princípio I.2(a).
+ */
+export function detalheAcao(acao: string, regras: string, riscos: string): string {
+  return `Ação prevista na especificação: ${acao}. Pré-condições: ${regras}. Riscos: ${riscos}. Qualquer transação bancária, fiscal, assinatura ou baixa requer confirmação externa.`;
+}
+
 export interface EventoContabil { quando: string; quem: string; acontecimento: string; justificativa: string }
 
 interface Props {

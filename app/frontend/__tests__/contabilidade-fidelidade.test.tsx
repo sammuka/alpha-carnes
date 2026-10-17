@@ -40,7 +40,7 @@ const telas = [
   },
 ];
 
-describe.each(telas)('fidelidade ao protótipo e à E01: $nome', ({ montar, colunas }) => {
+describe.each(telas)('fidelidade ao protótipo e à E01: $nome', ({ montar, colunas, acao, paragrafo }) => {
   it('+ Novo registro é secundário e só Ações do processo é primário', () => {
     montar();
     expect(screen.getByRole('button', { name: '+ Novo registro' })).toHaveClass('bg-card');
@@ -58,6 +58,11 @@ describe.each(telas)('fidelidade ao protótipo e à E01: $nome', ({ montar, colu
     expect(bloqueados.querySelector('.text-danger-fg')).not.toBeNull();
   });
 
+  it('cabeçalho não ordenável segue a caixa dos ordenáveis, como na grade da E01', () => {
+    montar();
+    expect(within(screen.getByRole('columnheader', { name: 'Situação' })).getByText('Situação')).toHaveClass('normal-case');
+  });
+
   it('abaixo de 800px a própria linha vira cartão: sem bloco escondido, sem <style>, cada célula com o rótulo da coluna', () => {
     const { container } = montar();
     expect(container.querySelector('style')).toBeNull();
@@ -68,5 +73,82 @@ describe.each(telas)('fidelidade ao protótipo e à E01: $nome', ({ montar, colu
     const rotulos = Array.from(linha.querySelectorAll('td[data-rotulo]')).map((celula) => celula.getAttribute('data-rotulo'));
     expect(rotulos).toEqual(colunas);
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+  });
+
+  it('o modal Ação do domínio traz o parágrafo de pré-condições e riscos', async () => {
+    montar();
+    await userEvent.click(screen.getByRole('button', { name: acao }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText(paragrafo)).toBeInTheDocument();
+    expect(dialogo).toHaveAccessibleDescription(paragrafo);
+  });
+});
+
+describe('lookup das contas e do centro nas políticas', () => {
+  const opcoes = {
+    contas: [{ codigo: '1.1.01', nome: 'Caixa e bancos' }, { codigo: '2.1.01', nome: 'Fornecedores' }],
+    centros: [{ codigo: 'CT1', nome: 'Operação industrial' }],
+  };
+
+  function mockOpcoes(corpo: unknown = opcoes) {
+    const chamadas: string[] = [];
+    global.fetch = jest.fn(async (url: string) => {
+      chamadas.push(String(url));
+      return { ok: true, status: 200, json: async () => corpo, text: async () => JSON.stringify(corpo) } as Response;
+    }) as unknown as typeof fetch;
+    return chamadas;
+  }
+
+  async function abrirDrawer() {
+    render(<PoliticasContabilizacaoClient inicial={[politica]} />);
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await screen.findByRole('option', { name: 'Fornecedores' }, { timeout: 2000 }).catch(() => undefined);
+  }
+
+  it.each([
+    ['Conta de débito', 'Pesquisar conta de débito'],
+    ['Conta de crédito', 'Pesquisar conta de crédito'],
+  ])('%s tem Pesquisar, dica de cadastro e o lookup preenche o select', async (rotulo, botao) => {
+    mockOpcoes();
+    await abrirDrawer();
+    await waitFor(() => expect(within(screen.getByLabelText(rotulo)).getAllByRole('option')).toHaveLength(3));
+    const pesquisar = screen.getByRole('button', { name: botao });
+    expect(pesquisar).toHaveTextContent('Pesquisar');
+    await userEvent.click(pesquisar);
+    const popup = await screen.findByRole('dialog', { name: `Selecionar ${rotulo}` });
+    await userEvent.type(within(popup).getByLabelText('Pesquisar cadastro'), 'forn');
+    expect(within(popup).queryByRole('button', { name: /Caixa e bancos/ })).not.toBeInTheDocument();
+    await userEvent.click(within(popup).getByRole('button', { name: /Fornecedores/ }));
+    expect(screen.queryByRole('dialog', { name: `Selecionar ${rotulo}` })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(rotulo)).toHaveValue('2.1.01');
+    expect(pesquisar).toHaveFocus();
+  });
+
+  it('as três seleções de cadastro do drawer mostram a dica do protótipo', async () => {
+    mockOpcoes();
+    await abrirDrawer();
+    expect(screen.getAllByText('Seleção vinculada ao cadastro; sem digitar identificadores.')).toHaveLength(3);
+  });
+
+  it('Pesquisar do centro de custo abre o lookup quando há opções; Escape fecha e devolve o foco', async () => {
+    mockOpcoes();
+    await abrirDrawer();
+    await waitFor(() => expect(within(screen.getByLabelText('Centro de custo')).getAllByRole('option')).toHaveLength(2));
+    const pesquisar = screen.getByRole('button', { name: 'Pesquisar centro de custo' });
+    await userEvent.click(pesquisar);
+    const popup = await screen.findByRole('dialog', { name: 'Selecionar Centro de custo' });
+    expect(within(popup).getByRole('button', { name: /Operação industrial/ })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Selecionar Centro de custo' })).not.toBeInTheDocument();
+    expect(pesquisar).toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Dados principais' })).toBeInTheDocument();
+  });
+
+  it('sem opções, Pesquisar avisa e não abre o lookup', async () => {
+    mockOpcoes({ contas: [], centros: [] });
+    await abrirDrawer();
+    await userEvent.click(screen.getByRole('button', { name: 'Pesquisar conta de débito' }));
+    expect(screen.queryByRole('dialog', { name: 'Selecionar Conta de débito' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('Nenhum cadastro disponível para seleção. Consulte a área responsável.').length).toBeGreaterThan(0);
   });
 });

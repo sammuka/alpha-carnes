@@ -5,13 +5,14 @@ import { ChevronDown } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { AbasContabeis, type Aba } from '@/components/contabilidade/abas-contabeis';
+import { AbasContabeis, detalheAcao, type Aba } from '@/components/contabilidade/abas-contabeis';
 import { GradeContabil, SeloSituacao, type ColunaContabil } from '@/components/contabilidade/grade-contabil';
+import { LookupCadastro, type OpcaoCadastro } from '@/components/contabilidade/lookup-cadastro';
 import { CampoForm } from '@/components/fiscal/comum/campo-form';
 import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
 import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
@@ -20,6 +21,16 @@ import { rotuloDataHora } from '@/lib/fiscal-enquadramentos';
 const CHAVE_RASCUNHO = 'politicas-de-contabilizacao';
 const POR_PAGINA = 20; // mesmo valor de PAGINA em politicas.service.ts
 const EXCECOES = ['Mapeamento ausente', 'Evento duplicado'];
+const REGRAS = 'origem imutável, não lançar sem mapeamento correto, balanceamento exato';
+const RISCOS = 'mapeamento ausente, evento duplicado';
+const DICA_SELECAO = 'Seleção vinculada ao cadastro; sem digitar identificadores.';
+const SEM_CADASTRO = 'Nenhum cadastro disponível para seleção. Consulte a área responsável.';
+type CampoCadastro = 'contaDebitoCodigo' | 'contaCreditoCodigo' | 'centroCodigo';
+const CAMPOS_CADASTRO: Record<CampoCadastro, string> = {
+  contaDebitoCodigo: 'Conta de débito',
+  contaCreditoCodigo: 'Conta de crédito',
+  centroCodigo: 'Centro de custo',
+};
 /** Referência do requisito (catalogo.js, E09-T02). */
 const REFERENCIA: Array<[string, string]> = [
   ['Campos', 'evento fonte, regra débito/crédito, centro custo, imposto, versão e data'],
@@ -80,7 +91,7 @@ export interface PoliticaApresentada {
   simulacaoCredito: string | null;
 }
 
-interface Opcao { codigo: string; nome: string }
+type Opcao = OpcaoCadastro;
 type Contagens = { revisao: number; suspensos: number };
 interface HistoricoLinha { quando: string; quem: string; acontecimento: string; justificativa: string }
 
@@ -207,6 +218,9 @@ export function PoliticasContabilizacaoClient({
   const [total, setTotal] = useState(totalInicial);
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   const sequenciaModal = useRef(0);
+  const [lookup, setLookup] = useState<CampoCadastro | null>(null);
+  const [buscaLookup, setBuscaLookup] = useState('');
+  const botoesLookup = useRef<Partial<Record<CampoCadastro, HTMLButtonElement | null>>>({});
 
   useEffect(() => {
     const cru = sessionStorage.getItem(CHAVE_RASCUNHO);
@@ -322,8 +336,23 @@ export function PoliticasContabilizacaoClient({
     setContas(corpo.contas ?? []);
     setCentros(corpo.centros ?? []);
     if ((corpo.contas ?? []).length === 0 && (corpo.centros ?? []).length === 0) {
-      setAviso('Nenhum cadastro disponível para seleção. Consulte a área responsável.');
+      setAviso(SEM_CADASTRO);
     }
+  }
+
+  function abrirLookup(campo: CampoCadastro) {
+    if ((campo === 'centroCodigo' ? centros : contas).length === 0) {
+      setAviso(SEM_CADASTRO);
+      return;
+    }
+    setBuscaLookup('');
+    setLookup(campo);
+  }
+
+  function fecharLookup() {
+    const campo = lookup;
+    setLookup(null);
+    if (campo) botoesLookup.current[campo]?.focus();
   }
 
   function abrirCriar() {
@@ -644,7 +673,7 @@ export function PoliticasContabilizacaoClient({
               carregandoEventos={carregandoHistorico}
               erroEventos={erroHistorico}
               situacao={selecionada ? { situacao: selecionada.situacao, rotulo: selecionada.situacaoRotulo } : null}
-              regras="origem imutável, não lançar sem mapeamento correto, balanceamento exato"
+              regras={REGRAS}
               excecoes={EXCECOES}
               referencia={REFERENCIA}
               ficha={selecionada ? (
@@ -697,7 +726,7 @@ export function PoliticasContabilizacaoClient({
         onFechar={() => setDrawer(null)}
         descricao="Operações previstas para as políticas de contabilização"
         apoio="Confirme permissões, validade, origem e efeitos contábeis antes de registrar."
-        condicionantes={['origem imutável, não lançar sem mapeamento correto, balanceamento exato', 'Exceções: mapeamento ausente, evento duplicado.']}
+        condicionantes={[REGRAS, `Exceções: ${RISCOS}.`]}
         comandos={[
           { titulo: 'Configurar mappings', rotuloAcessivel: 'Abrir decisão: Configurar mappings', abrir: abrirCriar },
           { titulo: 'Simular evento', rotuloAcessivel: 'Abrir decisão: Simular evento', abrir: () => { setDrawer(null); abrirModal('simular'); } },
@@ -706,7 +735,11 @@ export function PoliticasContabilizacaoClient({
       />
 
       <Sheet open={formularioAberto} onOpenChange={(aberto) => { if (!aberto) voltar(); }}>
-        <SheetContent aria-describedby={undefined} className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]">
+        <SheetContent
+          aria-describedby={undefined}
+          className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]"
+          onEscapeKeyDown={(evento) => { if (lookup) evento.preventDefault(); }}
+        >
           <SheetHeader className="border-b border-border p-5">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Contabilidade</span>
             <SheetTitle className="text-lg font-bold">Políticas de contabilização</SheetTitle>
@@ -714,32 +747,30 @@ export function PoliticasContabilizacaoClient({
           <div className="flex flex-1 flex-col gap-3 p-5">
             <SecaoRotulo>Dados principais</SecaoRotulo>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <CampoForm rotulo="Conta de débito">
-                <select aria-label="Conta de débito" className={CONTROLE} value={form.contaDebitoCodigo} onChange={(evento) => setForm({ ...form, contaDebitoCodigo: evento.target.value })}>
-                  <option value="">Selecione conta de débito</option>
-                  {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
-                </select>
-              </CampoForm>
-              <CampoForm rotulo="Conta de crédito">
-                <select aria-label="Conta de crédito" className={CONTROLE} value={form.contaCreditoCodigo} onChange={(evento) => setForm({ ...form, contaCreditoCodigo: evento.target.value })}>
-                  <option value="">Selecione conta de crédito</option>
-                  {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
-                </select>
-              </CampoForm>
-              <CampoForm rotulo="Centro de custo">
-                <div className="flex items-stretch gap-1.5">
-                  <select aria-label="Centro de custo" className={`${CONTROLE} min-w-0 flex-1`} value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
-                    <option value="">Selecione centro de custo</option>
-                    {centrosVisiveis.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
-                  </select>
-                  <Button type="button" size="sm" variant="secondary" title="Pesquisar cadastro pelo nome" onClick={() => {
-                    if (contas.length === 0 && centros.length === 0) {
-                      setAviso('Nenhum cadastro disponível para seleção. Consulte a área responsável.');
-                    }
-                  }}>Pesquisar</Button>
-                </div>
-                <span className="mt-1 block text-[11px] text-muted-foreground">Seleção vinculada ao cadastro; sem digitar identificadores.</span>
-              </CampoForm>
+              {(['contaDebitoCodigo', 'contaCreditoCodigo', 'centroCodigo'] as const).map((campo) => {
+                const rotulo = CAMPOS_CADASTRO[campo];
+                const opcoes = campo === 'centroCodigo' ? centrosVisiveis : contasVisiveis;
+                return (
+                  <CampoForm key={campo} rotulo={rotulo}>
+                    <div className="flex items-stretch gap-1.5">
+                      <select aria-label={rotulo} className={`${CONTROLE} min-w-0 flex-1`} value={form[campo]} onChange={(evento) => setForm({ ...form, [campo]: evento.target.value })}>
+                        <option value="">Selecione {rotulo.toLowerCase()}</option>
+                        {opcoes.map((opcao) => <option key={opcao.codigo} value={opcao.codigo}>{opcao.nome}</option>)}
+                      </select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        ref={(botao) => { botoesLookup.current[campo] = botao; }}
+                        aria-label={`Pesquisar ${rotulo.toLowerCase()}`}
+                        title="Pesquisar cadastro pelo nome"
+                        onClick={() => abrirLookup(campo)}
+                      >Pesquisar</Button>
+                    </div>
+                    <span className="mt-1 block text-[11px] text-muted-foreground">{DICA_SELECAO}</span>
+                  </CampoForm>
+                );
+              })}
               <CampoForm rotulo="Tipo de ocorrência">
                 <select aria-label="Tipo de ocorrência" className={CONTROLE} value={form.tipoEvento} disabled={drawer === 'editar'} onChange={(evento) => setForm({ ...form, tipoEvento: evento.target.value })}>
                   <option value="">Selecione tipo de ocorrência</option>
@@ -778,13 +809,25 @@ export function PoliticasContabilizacaoClient({
             <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
             <Button type="button" onClick={() => void gravar()}>Configurar mappings</Button>
           </SheetFooter>
+          {lookup && (
+            <LookupCadastro
+              rotulo={CAMPOS_CADASTRO[lookup]}
+              busca={buscaLookup}
+              onBusca={setBuscaLookup}
+              opcoes={(lookup === 'centroCodigo' ? centros : contas)
+                .filter((opcao) => `${opcao.nome} ${opcao.codigo}`.toLowerCase().includes(buscaLookup.trim().toLowerCase()))}
+              onEscolher={(opcao) => { setForm({ ...form, [lookup]: opcao.codigo }); fecharLookup(); }}
+              onFechar={fecharLookup}
+            />
+          )}
         </SheetContent>
       </Sheet>
 
       <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) setModal(null); }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Ação do domínio: {modal === 'simular' ? 'Simular evento' : 'Aprovar regra'}</DialogTitle>
+            <DialogDescription className="text-xs">{detalheAcao(modal === 'simular' ? 'Simular evento' : 'Aprovar regra', REGRAS, RISCOS)}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 px-4">
             {modal === 'simular' ? (

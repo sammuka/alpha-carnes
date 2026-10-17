@@ -5,13 +5,14 @@ import { ChevronDown } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { AbasContabeis, type Aba } from '@/components/contabilidade/abas-contabeis';
+import { AbasContabeis, detalheAcao, type Aba } from '@/components/contabilidade/abas-contabeis';
 import { GradeContabil, SeloSituacao, type ColunaContabil } from '@/components/contabilidade/grade-contabil';
+import { LookupCadastro } from '@/components/contabilidade/lookup-cadastro';
 import { CampoForm } from '@/components/fiscal/comum/campo-form';
 import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
 import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
@@ -97,6 +98,8 @@ const TITULOS_MODAL: Record<Modal, string> = {
   aprovar: 'Aprovar',
   'revisar-competencia': 'Revisar competência',
 };
+const REGRAS = 'partida dobrada, níveis hierárquicos válidos, competência obrigatória';
+const RISCOS = 'conta desativada, mudança de classificação após fechamento';
 const DICA_CADASTRO = 'Vinculado a cadastro existente; seleção obrigatória no formulário.';
 const DICA_ENUM = 'Valor pertencente ao conjunto de opções do domínio.';
 const CONTROLE = 'h-8 w-full rounded-md border border-border-strong bg-background px-2 text-xs disabled:bg-surface-2 read-only:bg-surface-2';
@@ -243,7 +246,6 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
   const pedidoPais = useRef(0);
   const pedidoRotuloPai = useRef(0);
   const botaoPesquisaPai = useRef<HTMLButtonElement>(null);
-  const popupPai = useRef<HTMLDivElement>(null);
   const [centroNovo, setCentroNovo] = useState({ codigo: '', nome: '', justificativa: '' });
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [acessoNegado, setAcessoNegado] = useState(semAcesso);
@@ -474,31 +476,6 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
     botaoPesquisaPai.current?.focus();
   }
 
-  // Enquanto o popup está aberto: Escape fecha de qualquer foco; Tab/Shift+Tab ciclam dentro dele.
-  useEffect(() => {
-    if (!lookupPai) return undefined;
-    function aoTeclar(evento: KeyboardEvent) {
-      if (evento.key === 'Escape') {
-        setLookupPai(false);
-        botaoPesquisaPai.current?.focus();
-        return;
-      }
-      if (evento.key !== 'Tab' || !popupPai.current) return;
-      const focaveis = Array.from(popupPai.current.querySelectorAll<HTMLElement>('button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'))
-        .filter((el) => !el.hasAttribute('disabled'));
-      const primeiro = focaveis[0];
-      const ultimo = focaveis[focaveis.length - 1];
-      if (!primeiro || !ultimo) return;
-      const dentro = popupPai.current.contains(document.activeElement);
-      if (!dentro || (evento.shiftKey && document.activeElement === primeiro) || (!evento.shiftKey && document.activeElement === ultimo)) {
-        evento.preventDefault();
-        (evento.shiftKey && dentro ? ultimo : primeiro).focus();
-      }
-    }
-    document.addEventListener('keydown', aoTeclar);
-    return () => document.removeEventListener('keydown', aoTeclar);
-  }, [lookupPai]);
-
   function escolherPai(opcao: OpcaoPai) {
     setForm({ ...form, contaPaiCodigo: opcao.codigo });
     pedidoRotuloPai.current += 1;
@@ -723,7 +700,7 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
               carregandoEventos={carregandoEventos}
               erroEventos={erroEventos}
               situacao={selecionada ? { situacao: selecionada.situacao, rotulo: selecionada.situacaoRotulo } : null}
-              regras="partida dobrada, níveis hierárquicos válidos, competência obrigatória"
+              regras={REGRAS}
               excecoes={EXCECOES}
               referencia={REFERENCIA}
               ficha={selecionada ? (
@@ -775,7 +752,7 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
         onFechar={() => setProcesso(false)}
         descricao="Operações previstas para o plano de contas e os centros de custo"
         apoio="Confirme permissões, validade, origem e efeitos contábeis antes de registrar."
-        condicionantes={['partida dobrada, níveis hierárquicos válidos, competência obrigatória', 'Exceções: conta desativada, mudança de classificação após fechamento.']}
+        condicionantes={[REGRAS, `Exceções: ${RISCOS}.`]}
         comandos={[
           { titulo: 'Criar', rotuloAcessivel: 'Abrir decisão: Criar', abrir: () => { setProcesso(false); abrirCriar(); } },
           { titulo: 'Versionar', rotuloAcessivel: 'Abrir decisão: Versionar', abrir: () => { setProcesso(false); setModal('versionar'); } },
@@ -881,48 +858,25 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
             <Button type="button" onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</Button>
           </SheetFooter>
           {lookupPai && (
-            <div
-              ref={popupPai}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Selecionar Conta contábil"
-              className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
-            >
-              <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-card shadow-lg">
-                <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-3">
-                  <h2 className="text-sm font-bold">Selecionar Conta contábil</h2>
-                  <Button type="button" size="sm" variant="secondary" onClick={fecharPesquisaPai}>Fechar</Button>
-                </div>
-                <input
-                  type="search"
-                  autoFocus
-                  placeholder="Pesquisar pelo nome ou descrição"
-                  aria-label="Pesquisar cadastro"
-                  className="m-3 h-9 w-[calc(100%-24px)] rounded-md border border-border-strong px-2 text-xs"
-                  value={paiBusca}
-                  onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }}
-                />
-                <div className="max-h-[315px] overflow-auto">
-                  {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
-                    <button type="button" key={opcao.codigo} className="block w-full border-b border-border px-3.5 py-2.5 text-left hover:bg-surface-2" onClick={() => escolherPai(opcao)}>
-                      <b className="block text-xs">{opcao.nome}</b>
-                      <small className="mt-1 block text-[10px] text-muted-foreground">{opcao.codigo}</small>
-                    </button>
-                  ))}
-                </div>
-                {erroPais && <p role="alert" className="px-3.5 py-2 text-xs text-destructive">{erroPais}</p>}
-                {paisTruncado && <p className="px-3.5 py-2 text-xs text-muted-foreground">Refine a busca para ver mais contas.</p>}
-                <p className="px-3.5 py-2.5 text-[10px] text-muted-foreground">A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</p>
-              </div>
-            </div>
+            <LookupCadastro
+              rotulo="Conta contábil"
+              busca={paiBusca}
+              onBusca={(texto) => { setPaiBusca(texto); void carregarPais(texto); }}
+              opcoes={paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo))}
+              onEscolher={escolherPai}
+              onFechar={fecharPesquisaPai}
+              erro={erroPais}
+              truncado={paisTruncado}
+            />
           )}
         </SheetContent>
       </Sheet>
 
       <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) { setModal(null); setAviso(''); } }}>
-        <DialogContent aria-describedby={undefined}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Ação do domínio: {modal ? TITULOS_MODAL[modal] : ''}</DialogTitle>
+            <DialogDescription className="text-xs">{modal ? detalheAcao(TITULOS_MODAL[modal], REGRAS, RISCOS) : ''}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 px-4">
             <CampoForm rotulo="Justificativa / observação" htmlFor="action-reason">

@@ -67,7 +67,7 @@ export function GradeContabil<L extends { codigo: string }>({
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8"><span className="sr-only">Selecionar</span></TableHead>
               {colunas.map((coluna) => {
-                if (!coluna.ordenar) return <TableHead key={coluna.rotulo}><span className="font-semibold">{coluna.rotulo}</span></TableHead>;
+                if (!coluna.ordenar) return <TableHead key={coluna.rotulo}><span className="font-semibold normal-case">{coluna.rotulo}</span></TableHead>;
                 const ativa = ordenar === coluna.ordenar;
                 const Icone = !ativa ? ArrowUpDown : direcao === 'asc' ? ArrowUp : ArrowDown;
                 const chave = coluna.ordenar;

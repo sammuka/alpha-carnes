@@ -293,3 +293,29 @@ test('a 760px cada política vira um cartão e a 1280px segue em tabela, com con
   }
   await admin.close();
 });
+
+test('Pesquisar abre o lookup das contas e do centro e a escolha preenche o formulário', async ({ browser, baseURL }) => {
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  await page.getByRole('button', { name: '+ Novo registro', exact: true }).click();
+  await expect(page.getByLabel('Conta de débito', { exact: true }).locator('option', { hasText: plano.debitoNome })).toHaveCount(1);
+  await expect(page.getByText('Seleção vinculada ao cadastro; sem digitar identificadores.', { exact: true })).toHaveCount(3);
+  for (const [rotulo, nome] of [['Conta de débito', plano.debitoNome], ['Conta de crédito', plano.creditoNome], ['Centro de custo', plano.centroNome]] as const) {
+    const botao = page.getByRole('button', { name: `Pesquisar ${rotulo.toLowerCase()}`, exact: true });
+    await botao.click();
+    const lookup = page.getByRole('dialog', { name: `Selecionar ${rotulo}`, exact: true });
+    await expect(lookup).toBeVisible();
+    await lookup.getByLabel('Pesquisar cadastro', { exact: true }).fill(nome);
+    await lookup.getByRole('button', { name: new RegExp(nome) }).click();
+    await expect(lookup).toBeHidden();
+    await expect(page.getByLabel(rotulo, { exact: true }).locator('option:checked')).toHaveText(nome);
+    await expect(botao).toBeFocused();
+  }
+  await page.getByRole('button', { name: 'Pesquisar conta de débito', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Selecionar Conta de débito', exact: true })).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'Dados principais' })).toBeVisible();
+  await admin.close();
+});
