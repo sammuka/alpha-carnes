@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* e2e/ não tem classes da UI; vigiá-lo faz o next dev recompilar (e recarregar a página) a cada artefato do Playwright. */
+@source not "../../e2e";
 
 @theme {
   /* ============ DS v3 — Direção A (aprovada 2026-08-05) ============ */
