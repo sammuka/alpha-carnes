@@ -60,6 +60,72 @@ function literaisDeCor(file: string, padrao: RegExp): string[] {
   return hits;
 }
 
+/** Valor literal aceito em `style`: só token (`var(--x)`) ou zero; o resto vai para classe/token do DS. */
+const VALOR_ESTILO_LIVRE = /^(var\(--[\w-]+\)|0(px|%)?)$/;
+const DISPLAY_RESPONSIVO = /:(flex|block|grid|inline|inline-flex|inline-block|inline-grid|table|contents|flow-root)$/;
+
+function sourceFile(file: string, texto: string): ts.SourceFile {
+  return ts.createSourceFile(file, texto, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+}
+
+function semEnvoltorio(expr: ts.Expression): ts.Expression {
+  let e = expr;
+  while (ts.isAsExpression(e) || ts.isParenthesizedExpression(e) || ts.isSatisfiesExpression(e)) e = e.expression;
+  return e;
+}
+
+/** `style={{ cor: 'red', largura: 37 }}`: literal arbitrário inline fora do DS. */
+function estilosArbitrarios(file: string, texto = readFileSync(file, 'utf8')): string[] {
+  const sf = sourceFile(file, texto);
+  const hits: string[] = [];
+  const literal = (e: ts.Expression): void => {
+    const x = semEnvoltorio(e);
+    if (ts.isConditionalExpression(x)) return [x.whenTrue, x.whenFalse].forEach(literal);
+    const valor = ts.isStringLiteralLike(x) ? x.text : ts.isNumericLiteral(x) ? x.text : undefined;
+    if (valor !== undefined && !VALOR_ESTILO_LIVRE.test(valor)) {
+      hits.push(`${caminhoPosix(file)}:${sf.getLineAndCharacterOfPosition(x.getStart(sf)).line + 1}`);
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxAttribute(node) && node.name.getText(sf) === 'style' && node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression) {
+      const obj = semEnvoltorio(node.initializer.expression);
+      if (ts.isObjectLiteralExpression(obj)) {
+        for (const prop of obj.properties) if (ts.isPropertyAssignment(prop)) literal(prop.initializer);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
+}
+
+/** `className="hidden ..."` sem breakpoint que reexiba: contêiner que nunca aparece. */
+function hiddenSemBreakpoint(file: string, texto = readFileSync(file, 'utf8')): string[] {
+  const sf = sourceFile(file, texto);
+  const hits: string[] = [];
+  const checar = (e: ts.Expression): void => {
+    if (!ts.isStringLiteralLike(e)) return;
+    const tokens = e.text.split(/\s+/);
+    if (tokens.includes('hidden') && !tokens.some((t) => DISPLAY_RESPONSIVO.test(t))) {
+      hits.push(`${caminhoPosix(file)}:${sf.getLineAndCharacterOfPosition(e.getStart(sf)).line + 1}`);
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxAttribute(node) && node.name.getText(sf) === 'className' && node.initializer) {
+      if (ts.isStringLiteral(node.initializer)) checar(node.initializer);
+      else if (ts.isJsxExpression(node.initializer) && node.initializer.expression) {
+        const e = node.initializer.expression;
+        // literal direto ou argumento direto de cn()/clsx(); ramos condicionais alternam de propósito
+        if (ts.isCallExpression(e)) e.arguments.forEach(checar);
+        else checar(e);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
+}
+
 describe('tokens do DS', () => {
   const globals = readFileSync(GLOBALS, 'utf8');
 
@@ -130,6 +196,31 @@ describe('tokens do DS', () => {
         "[stroke='#fff']",
       ],
     });
+  });
+
+  it('style inline aceita só token ou zero (fixture ruim reprova)', () => {
+    const ruim = [
+      'export const A = () => (',
+      "  <div style={{ color: 'red', width: 37, height: ok ? '12px' : '0px', background: 'var(--color-accent)' }} />",
+      ');',
+    ].join('\n');
+    expect(estilosArbitrarios('fixture.tsx', ruim)).toEqual(['fixture.tsx:2', 'fixture.tsx:2', 'fixture.tsx:2']);
+    expect(fontes('src').filter((f) => f.endsWith('x')).flatMap((file) => estilosArbitrarios(file))).toEqual([]);
+  });
+
+  it('hidden em contêiner exige breakpoint que reexiba (fixture ruim reprova)', () => {
+    const ruim = [
+      'export const A = () => (',
+      '  <>',
+      '    <div className="hidden flex-col gap-2" />',
+      "    <div className={cn('hidden', aberto && 'block')} />",
+      '    <div className="hidden md:flex" />',
+      "    <div className={aberto ? 'block' : 'hidden'} />",
+      '  </>',
+      ');',
+    ].join('\n');
+    expect(hiddenSemBreakpoint('fixture.tsx', ruim)).toEqual(['fixture.tsx:3', 'fixture.tsx:4']);
+    expect(fontes('src').filter((f) => f.endsWith('x')).flatMap((file) => hiddenSemBreakpoint(file))).toEqual([]);
   });
 
   it('globals.css e a unica folha de estilo do frontend', () => {
