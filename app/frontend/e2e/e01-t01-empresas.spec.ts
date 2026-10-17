@@ -247,6 +247,9 @@ test.describe('E01-T01 Empresas, estabelecimentos e regime', () => {
     await expect(linhaAnterior.getByRole('cell').nth(2)).toHaveText('Sem fim');
 
     // Nova versão (início hoje) com troca confirmada; ao aprovar, a anterior termina em D−1.
+    // A reabre a ficha: com next dev frio, as compilações disparadas por B recarregam a página de A
+    // e a seleção (só em memória) se perde.
+    await reabrir(a, ident.nome, 'Movimentações');
     await a.getByRole('button', { name: 'Nova versão' }).click();
     await dialogoRegime.locator('#regime-crt').selectOption('1');
     await dialogoRegime.locator('#regime-inicio').click();
