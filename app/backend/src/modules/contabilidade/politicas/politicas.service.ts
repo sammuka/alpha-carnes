@@ -207,7 +207,7 @@ function brl(valor: string): string {
 }
 
 /** Rótulo da ação e, quando houve, a troca de cada campo ("Conta de débito: 1.1.01 → 1.9"), só com códigos de negócio. */
-function acontecimentoDe(antes: unknown, dados: unknown, operacao: string) {
+export function acontecimentoDe(antes: unknown, dados: unknown, operacao: string) {
   if (!dados || typeof dados !== 'object' || !('acao' in dados)) return operacao;
   const novos = dados as Record<string, unknown>;
   const rotulo = ROTULO_ACAO[String(novos.acao)];
