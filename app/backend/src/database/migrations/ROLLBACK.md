@@ -247,3 +247,47 @@ Não derrubar `simulacoes_fiscais`, `regras_tributarias`, `classificacoes_ibs_cb
 `fiscal.homologacoes_perfis_autorizados`, as três permissões e o item de menu no mesmo revert da fatia.
 Os parâmetros `fiscal.simulacoes_perfis_autorizados`, `fiscal.regras_perfis_autorizados` e
 `fiscal.enquadramentos_perfis_autorizados` ficam.
+
+## E09-T01 / E09-T02 — `0049_e09_t01_plano_contas` e `0050_e09_t02_politicas_contabilizacao` (expand-only)
+
+Migrations geradas por `drizzle-kit generate`, com os triggers `set_updated_at()` acrescentados ao final
+(plano E09-T01 D8). Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX`, `ALTER TABLE <tabela nova> ADD CONSTRAINT`
+e `CREATE TRIGGER` sobre as seis tabelas novas. Não há `INSERT`, `UPDATE` nem `ALTER` de tabela existente;
+as únicas FKs para fora apontam para `usuarios`.
+
+As tabelas da 0050 referenciam `contas_contabeis` e `centros_custo` da 0049: o rollback das duas é um só,
+sempre na ordem 0050 → 0049, e nunca só a 0049.
+
+```sql
+-- 0050 (E09-T02)
+DROP TABLE IF EXISTS politica_simulacoes;
+DROP TABLE IF EXISTS politica_versoes;
+DROP TABLE IF EXISTS politicas_contabilizacao;
+-- 0049 (E09-T01)
+DROP TABLE IF EXISTS conta_versoes;
+DROP TABLE IF EXISTS contas_contabeis;
+DROP TABLE IF EXISTS centros_custo;
+```
+
+Os triggers `trg_*_updated_at` saem com as tabelas. A função `set_updated_at()` (0015) fica. Não derrubar
+nenhuma tabela da E01 (`cenarios_regressao`, `homologacoes_regras`, `simulacoes_fiscais`, `regras_tributarias`,
+`classificacoes_ibs_cbs`, `beneficios_fiscais`, `enquadramentos_fiscais`, `cfops`, `ncms`,
+`regimes_tributarios`, `estabelecimento_*`, `estabelecimentos`, `empresas`) nem `usuarios`.
+
+Rollback:
+
+- Código: revert dos commits das duas fatias por PR (sem force-push). O mesmo revert remove:
+  - as quatro permissões `CONTABILIDADE_PLANO_LER`, `CONTABILIDADE_PLANO_GERENCIAR`,
+    `CONTABILIDADE_POLITICA_LER` e `CONTABILIDADE_POLITICA_GERENCIAR` (`permissoes.ts`, descrições,
+    `perfil-permissoes.snapshot.json` e o módulo `Contabilidade` em `perfis.service.ts`);
+  - as duas rotas e itens de menu `/erp/contabilidade/plano-de-contas` e
+    `/erp/contabilidade/politicas-de-contabilizacao` (`menus-canonicos.ts`, `perfil-menus.snapshot.json`,
+    `menu-v2.ts` do frontend); o limite de `definirMenusSchema` acompanha `MENUS_CANONICOS.length`;
+  - os arquivos `0049_e09_t01_plano_contas.sql`, `0050_e09_t02_politicas_contabilizacao.sql`,
+    `meta/0049_snapshot.json`, `meta/0050_snapshot.json` e as entradas `idx` 49 e 50 de `meta/_journal.json`.
+    Journal, snapshots e SQL saem juntos: nunca remover só o `.sql` nem só a entrada do journal.
+- Banco: Dev/CI sem dados: os `DROP` acima, na ordem, e depois `DELETE FROM drizzle.__drizzle_migrations`
+  das duas linhas cujo `hash` corresponde à 0049 e à 0050, para o journal revertido e o banco concordarem.
+  Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: o próximo `db:seed` depois do revert apaga de `permissoes` e `perfis_permissoes` os códigos fora do catálogo e reconcilia `menus_visiveis`, sem as
+  permissões `CONTABILIDADE_*` e sem as duas rotas. As permissões e menus da E01 ficam.
