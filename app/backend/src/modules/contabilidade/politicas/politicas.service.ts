@@ -411,7 +411,8 @@ export class PoliticasContabilizacaoService {
       .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
       .where(filtro);
       // KPIs da tela (Em revisão, Bloqueados) sobre a última versão de todas as políticas, sem o filtro da grade.
-      const [kpi] = await tx.select({
+      // Agregado sem GROUP BY: sempre uma linha.
+      const [kpi] = (await tx.select({
         revisao: sql<number>`count(*) filter (where ${politicaVersoes.situacao} = 'REVIEW')::int`,
         suspensos: sql<number>`count(*) filter (where ${politicaVersoes.situacao} = 'SUSPENDED')::int`,
       })
@@ -424,11 +425,11 @@ export class PoliticasContabilizacaoService {
             where v2.politica_id = ${politicasContabilizacao.id} and v2.deleted_at is null
           )`,
         ))
-        .where(isNull(politicasContabilizacao.deletedAt));
+        .where(isNull(politicasContabilizacao.deletedAt))) as [{ revisao: number; suspensos: number }];
       return {
         itens: linhas.map((linha) => this.apresentar(linha)),
         total: Number(contagem?.total ?? 0),
-        contagens: { revisao: Number(kpi?.revisao ?? 0), suspensos: Number(kpi?.suspensos ?? 0) },
+        contagens: { revisao: Number(kpi.revisao), suspensos: Number(kpi.suspensos) },
       };
     }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   }

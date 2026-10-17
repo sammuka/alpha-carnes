@@ -168,7 +168,8 @@ export class PlanoContasService {
 
   /** KPIs da tela (Em revisão, Bloqueados) sobre a última versão de todas as contas, sem o filtro da grade. */
   private async contagens(tx: Tx): Promise<ContagensPlano> {
-    const [linha] = await tx.select({
+    // Agregado sem GROUP BY: sempre uma linha.
+    const [linha] = (await tx.select({
       revisao: sql<number>`count(*) filter (where ${contaVersoes.situacao} = 'REVIEW')::int`,
       suspensos: sql<number>`count(*) filter (where ${contaVersoes.situacao} = 'SUSPENDED')::int`,
     })
@@ -178,8 +179,8 @@ export class PlanoContasService {
         isNull(contasContabeis.deletedAt),
         isNull(contaVersoes.deletedAt),
         sql`${contaVersoes.numero} = (select max(v2.numero) from conta_versoes v2 where v2.conta_id = ${contaVersoes.contaId} and v2.deleted_at is null)`,
-      ));
-    return { revisao: Number(linha?.revisao ?? 0), suspensos: Number(linha?.suspensos ?? 0) };
+      ))) as [ContagensPlano];
+    return { revisao: Number(linha.revisao), suspensos: Number(linha.suspensos) };
   }
 
   async obter(codigo: string): Promise<ContaApresentada> {
