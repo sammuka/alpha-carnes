@@ -244,3 +244,52 @@ test('Exportar visão baixa o CSV com todas as linhas da visão, sem id e com a 
   expect(texto).not.toContain(`;${propria.debitoNome};`);
   await admin.close();
 });
+
+test('a 760px cada política vira um cartão e a 1280px segue em tabela, com contagem, seleção e ações', async ({ browser, baseURL, playwright }) => {
+  const api = await playwright.request.newContext();
+  let propria: PlanoDaJornada;
+  try {
+    propria = await criarPlanoDaJornada(api);
+    await criarPoliticas(api, propria, 3);
+  } finally {
+    await api.dispose();
+  }
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  await page.getByLabel('Buscar registros da lista').fill(propria.debitoNome);
+  // A mesma tela redimensionada: a media query troca a tabela pelos cartões sem recarregar.
+  for (const largura of [1280, 760]) {
+    await page.setViewportSize({ width: largura, height: 900 });
+    const linhas = page.locator('.politicas-grade tbody tr');
+    await expect(linhas).toHaveCount(3);
+    await expect(linhas.first()).toBeVisible();
+    await expect(page.getByText('Exibindo 3 de 3', { exact: true })).toBeVisible();
+    const estilo = await linhas.first().evaluate((tr) => ({
+      display: getComputedStyle(tr).display,
+      rotulo: getComputedStyle(tr.querySelector('td[data-rotulo]')!, '::before').content,
+      largura: tr.getBoundingClientRect().width,
+    }));
+    if (largura === 760) {
+      expect(estilo.display).toBe('grid');
+      expect(estilo.rotulo).toBe('"Competência"');
+      expect(estilo.largura).toBeLessThan(760);
+      await expect(page.locator('.politicas-grade thead')).toBeHidden();
+    } else {
+      expect(estilo.display).toBe('table-row');
+      await expect(page.getByRole('columnheader', { name: 'Situação', exact: true })).toBeVisible();
+    }
+    const caixa = linhas.first().getByRole('checkbox');
+    await expect(caixa).toBeVisible();
+    await caixa.check();
+    await expect(caixa).toBeChecked();
+    for (const nome of ['+ Novo registro', 'Ações do processo', 'Simular evento', 'Aprovar regra']) {
+      await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText('Exigem decisão humana', { exact: true })).toBeVisible();
+    await expect(page.getByText('Não gerar sucesso falso', { exact: true })).toBeVisible();
+  }
+  await admin.close();
+});

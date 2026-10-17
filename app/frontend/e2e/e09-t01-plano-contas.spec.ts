@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { limparPlano } from './limpar-plano';
+import { criarPlanoDaJornada } from './helpers/e09-t02-seed';
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@CiTest123456';
@@ -231,6 +232,50 @@ test.describe('Plano de contas', () => {
     const bytes = await readFile(await download.path());
     expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
     expect(bytes.toString('utf8')).toContain('Grupo do ativo');
+    await page.close();
+  });
+
+  test('a 760px cada conta vira um cartão e a 1280px segue em tabela, com contagem, seleção e ações', async ({ playwright }) => {
+    const api = await playwright.request.newContext();
+    try {
+      await criarPlanoDaJornada(api);
+    } finally {
+      await api.dispose();
+    }
+    const page = await adminContext.newPage();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/erp/contabilidade/plano-de-contas');
+    // A mesma tela redimensionada: a media query troca a tabela pelos cartões sem recarregar.
+    for (const largura of [1280, 760]) {
+      await page.setViewportSize({ width: largura, height: 900 });
+      const linhas = page.locator('.plano-grade tbody tr');
+      await expect(linhas).toHaveCount(4);
+      await expect(linhas.first()).toBeVisible();
+      await expect(page.getByText('Exibindo 4 de 4', { exact: true })).toBeVisible();
+      const estilo = await linhas.first().evaluate((tr) => ({
+        display: getComputedStyle(tr).display,
+        rotulo: getComputedStyle(tr.querySelector('td[data-rotulo]')!, '::before').content,
+        largura: tr.getBoundingClientRect().width,
+      }));
+      if (largura === 760) {
+        expect(estilo.display).toBe('grid');
+        expect(estilo.rotulo).toBe('"Conta contábil"');
+        expect(estilo.largura).toBeLessThan(760);
+        await expect(page.locator('.plano-grade thead')).toBeHidden();
+      } else {
+        expect(estilo.display).toBe('table-row');
+        await expect(page.getByRole('columnheader', { name: 'Situação', exact: true })).toBeVisible();
+      }
+      const caixa = linhas.first().getByRole('checkbox');
+      await expect(caixa).toBeVisible();
+      await caixa.check();
+      await expect(caixa).toBeChecked();
+      for (const nome of ['+ Novo registro', 'Ações do processo', 'Versionar', 'Aprovar']) {
+        await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
+      }
+      await expect(page.getByText('Exigem decisão humana', { exact: true })).toBeVisible();
+      await expect(page.getByText('Não gerar sucesso falso', { exact: true })).toBeVisible();
+    }
     await page.close();
   });
 

@@ -576,13 +576,6 @@ export function PoliticasContabilizacaoClient({
 
   return (
     <div className="grid gap-4">
-      <style>{`
-        .politicas-cartoes { display: none; }
-        @media (max-width: 800px) {
-          .politicas-grade { display: none; }
-          .politicas-cartoes { display: grid; gap: 12px; }
-        }
-      `}</style>
       <PageHeader
         title="Políticas de contabilização"
         subtitle="configurar mappings, simular evento, aprovar regra."
@@ -639,21 +632,6 @@ export function PoliticasContabilizacaoClient({
               onOrdenar={ordenarPor}
               onPagina={setPagina}
             />
-            <div className="politicas-cartoes" hidden>
-              {linhas.map((linha) => (
-                <article key={linha.codigo} className="grid gap-1 rounded-md border border-border p-3 text-xs">
-                  <input
-                    type="checkbox"
-                    aria-label={`Selecionar ${linha.tipoEventoRotulo}`}
-                    checked={marcadas.includes(linha.codigo)}
-                    onChange={() => alternar(linha.codigo)}
-                  />
-                  {COLUNAS.map((coluna) => (
-                    <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {celula(linha, coluna.rotulo)}</p>
-                  ))}
-                </article>
-              ))}
-            </div>
           </CardContent>
         </Card>
         <Card className="min-w-0">

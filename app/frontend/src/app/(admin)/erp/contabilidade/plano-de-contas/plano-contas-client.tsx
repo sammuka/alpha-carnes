@@ -630,13 +630,6 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
 
   return (
     <div className="grid gap-4">
-      <style>{`
-        .plano-cartoes { display: none; }
-        @media (max-width: 800px) {
-          .plano-grade { display: none; }
-          .plano-cartoes { display: grid; gap: 12px; }
-        }
-      `}</style>
       <PageHeader
         title="Plano de contas e centros de custo"
         subtitle="criar, versionar, aprovar, bloquear conta e mapear lançamentos."
@@ -715,15 +708,6 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
               onOrdenar={(chave) => ordenarPor(chave as Ordenar)}
               onPagina={irParaPagina}
             />
-            <div className="plano-cartoes">
-              {contas.map((conta) => (
-                <article key={conta.codigo} className="grid gap-1 rounded-md border border-border p-3 text-xs">
-                  {COLUNAS.map((coluna) => (
-                    <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {valorCelula(conta, coluna.rotulo)}</p>
-                  ))}
-                </article>
-              ))}
-            </div>
           </CardContent>
         </Card>
         <Card className="min-w-0">

@@ -47,6 +47,10 @@ export function SeloSituacao({ situacao, rotulo }: { situacao: string; rotulo: s
 
 const LINK = cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50');
 
+/** Abaixo de 800px cada linha vira um cartão com os rótulos das colunas (`data-rotulo`); a mesma linha, o mesmo checkbox. */
+const CARTAO_LINHA = 'max-[800px]:grid max-[800px]:gap-1 max-[800px]:rounded-md max-[800px]:border! max-[800px]:p-3';
+const CARTAO_CELULA = 'max-[800px]:flex max-[800px]:h-auto max-[800px]:gap-1.5 max-[800px]:whitespace-normal max-[800px]:p-0 max-[800px]:before:font-bold max-[800px]:before:content-[attr(data-rotulo)]';
+
 /**
  * Grade das telas contábeis: seleção múltipla, ordenação e paginação no servidor e o rodapé
  * "Exibindo N de M registros" do protótipo. Enter ou clique seleciona a linha.
@@ -57,9 +61,9 @@ export function GradeContabil<L extends { codigo: string }>({
 }: Props<L>) {
   return (
     <div className="min-w-0 space-y-2">
-      <div className={cn(className, 'overflow-x-auto rounded-md border border-border')} aria-busy={carregando}>
-        <Table>
-          <TableHeader>
+      <div className={cn(className, 'overflow-x-auto rounded-md border border-border max-[800px]:border-0')} aria-busy={carregando}>
+        <Table className="max-[800px]:block">
+          <TableHeader className="max-[800px]:hidden">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-8"><span className="sr-only">Selecionar</span></TableHead>
               {colunas.map((coluna) => {
@@ -83,7 +87,7 @@ export function GradeContabil<L extends { codigo: string }>({
               })}
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="max-[800px]:grid max-[800px]:gap-3">
             {linhas.length === 0 && carregando ? null : linhas.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={colunas.length + 1} className="p-3">
@@ -96,7 +100,7 @@ export function GradeContabil<L extends { codigo: string }>({
                 tabIndex={0}
                 aria-selected={selecionado === linha.codigo}
                 data-state={selecionado === linha.codigo ? 'selected' : undefined}
-                className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                className={cn('cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', CARTAO_LINHA)}
                 onClick={() => onSelecionar(linha.codigo)}
                 onKeyDown={(evento) => {
                   if (evento.key === 'Enter' && evento.target === evento.currentTarget) {
@@ -105,7 +109,7 @@ export function GradeContabil<L extends { codigo: string }>({
                   }
                 }}
               >
-                <TableCell>
+                <TableCell className="max-[800px]:h-auto max-[800px]:p-0">
                   <input
                     type="checkbox"
                     className="size-3.5 accent-primary"
@@ -114,7 +118,7 @@ export function GradeContabil<L extends { codigo: string }>({
                     onChange={() => onMarcar(linha.codigo)}
                   />
                 </TableCell>
-                {colunas.map((coluna) => <TableCell key={coluna.rotulo}>{coluna.celula(linha)}</TableCell>)}
+                {colunas.map((coluna) => <TableCell key={coluna.rotulo} data-rotulo={coluna.rotulo} className={CARTAO_CELULA}>{coluna.celula(linha)}</TableCell>)}
               </TableRow>
             ))}
           </TableBody>
