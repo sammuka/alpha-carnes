@@ -36,6 +36,19 @@ describe('migration do plano de contas (E09-T01)', () => {
     }
   });
 
+  it('conta_versoes nasce com autor_id obrigatório, FK para usuarios e índice (AD-39), sem ALTER posterior', () => {
+    const sql = readFileSync(path.join(MIGRATIONS, '0049_e09_t01_plano_contas.sql'), 'utf8');
+    expect(sql).toMatch(/CREATE TABLE "conta_versoes" \([^;]*"autor_id" uuid NOT NULL,/);
+    expect(sql).toContain('ADD CONSTRAINT "conta_versoes_autor_id_usuarios_id_fk" FOREIGN KEY ("autor_id") REFERENCES "public"."usuarios"("id")');
+    expect(sql).toContain('CREATE INDEX "idx_conta_versoes_autor" ON "conta_versoes" USING btree ("autor_id")');
+    const t02 = readFileSync(path.join(MIGRATIONS, '0050_e09_t02_politicas_contabilizacao.sql'), 'utf8');
+    expect(t02).not.toContain('autor_id');
+    const snapshot = JSON.parse(readFileSync(path.join(META, '0049_snapshot.json'), 'utf8')) as {
+      tables: Record<string, { columns: Record<string, { notNull: boolean }> }>;
+    };
+    expect(snapshot.tables['public.conta_versoes']?.columns.autor_id?.notNull).toBe(true);
+  });
+
   it('cada CREATE TRIGGER é precedido pela linha --> statement-breakpoint', () => {
     const sql = readFileSync(path.join(MIGRATIONS, '0049_e09_t01_plano_contas.sql'), 'utf8');
     expect(sql.match(/CREATE TRIGGER/g)).toHaveLength(3);

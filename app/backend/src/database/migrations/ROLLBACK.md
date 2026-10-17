@@ -255,6 +255,11 @@ Migrations geradas por `drizzle-kit generate`, com os triggers `set_updated_at()
 e `CREATE TRIGGER` sobre as seis tabelas novas. Não há `INSERT`, `UPDATE` nem `ALTER` de tabela existente;
 as únicas FKs para fora apontam para `usuarios`.
 
+A 0049 inclui `conta_versoes.autor_id` (autor original da versão, AD-39), com FK
+`conta_versoes_autor_id_usuarios_id_fk` e índice `idx_conta_versoes_autor`, criados no mesmo `CREATE TABLE`
+(a 0049 não estava em `develop` quando a coluna entrou; não há `ALTER` posterior). O `DROP TABLE conta_versoes`
+abaixo remove coluna, FK e índice; a 0050 não referencia `autor_id`.
+
 As tabelas da 0050 referenciam `contas_contabeis` e `centros_custo` da 0049: o rollback das duas é um só,
 sempre na ordem 0050 → 0049, e nunca só a 0049.
 

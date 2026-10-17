@@ -18,6 +18,7 @@ import {
   type OpcoesPaiQuery,
   type LoteDto,
 } from './dto/plano.dto';
+import { codigoParamSchema } from '../texto';
 import { PlanoContasService } from './plano.service';
 
 @SkipThrottle()
@@ -78,14 +79,14 @@ export class PlanoContasController {
 
   @Get('plano/:codigo/historico')
   @RequirePermissoes('CONTABILIDADE_PLANO_LER')
-  historico(@Param('codigo') codigo: string) {
+  historico(@Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string) {
     return this.plano.historico(codigo);
   }
 
   @Post('plano/:codigo/:acao')
   @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
   acao(
-    @Param('codigo') codigo: string,
+    @Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string,
     @Param('acao') acao: string,
     @Body() corpo: unknown,
     @CurrentUser() user: CurrentUserPayload,

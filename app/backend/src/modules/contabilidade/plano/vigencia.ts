@@ -19,12 +19,34 @@ export async function ultimaVersaoDecidida(executor: Executor, contaId: string) 
   return versao ?? null;
 }
 
+/** Data civil de hoje em America/Sao_Paulo (plano D3), como 'AAAA-MM-DD'. */
+export async function hojeSaoPaulo(executor: Pick<NodePgDatabase<typeof schema>, 'execute'>): Promise<string> {
+  const resultado = await executor.execute(sql`select ((now() at time zone 'America/Sao_Paulo')::date)::text as hoje`);
+  return (resultado.rows[0] as { hoje: string }).hoje;
+}
+
+/** Vigente na data: início ≤ data e fim nulo ou ≥ data (datas ISO comparam como texto). */
+export function vigenteEm(versao: { vigenciaInicio: string; vigenciaFim: string | null }, data: string): boolean {
+  return versao.vigenciaInicio <= data && (versao.vigenciaFim === null || versao.vigenciaFim >= data);
+}
+
+/** A vigência da filha cabe inteira na do pai (fim nulo = sem fim). */
+export function vigenciaContida(
+  filha: { vigenciaInicio: string; vigenciaFim: string | null },
+  pai: { vigenciaInicio: string; vigenciaFim: string | null },
+): boolean {
+  if (filha.vigenciaInicio < pai.vigenciaInicio) return false;
+  if (pai.vigenciaFim === null) return true;
+  return filha.vigenciaFim !== null && filha.vigenciaFim <= pai.vigenciaFim;
+}
+
 /** Teto da lista de opções de conta pai; acima dele a busca (`q`) reduz o resultado. */
 export const LIMITE_OPCOES_PAI = 50;
 
 /**
  * Contas que o backend aceitaria como pai: a última versão decidida (a mesma de
- * `ultimaVersaoDecidida`) é APPROVED e sintética. Não depende de página nem de filtro da grade.
+ * `ultimaVersaoDecidida`) é APPROVED, sintética e vigente hoje em America/Sao_Paulo (plano D3).
+ * Não depende de página nem de filtro da grade.
  * Uma consulta só (DISTINCT ON) em vez de uma por conta. `q` filtra por código ou nome, sem caixa;
  * `%`, `_` e `\` do texto são literais.
  */
@@ -37,7 +59,7 @@ export async function opcoesPaiVigentes(
   const resultado = await executor.execute(sql`
     select d.codigo, d.nome
       from (
-        select distinct on (c.id) c.codigo, v.nome, v.classificacao, v.situacao
+        select distinct on (c.id) c.codigo, v.nome, v.classificacao, v.situacao, v.vigencia_inicio, v.vigencia_fim
           from contas_contabeis c
           join conta_versoes v on v.conta_id = c.id
          where c.deleted_at is null
@@ -47,6 +69,8 @@ export async function opcoesPaiVigentes(
       ) d
      where d.situacao = 'APPROVED'
        and d.classificacao = 'sintetica'
+       and d.vigencia_inicio <= (now() at time zone 'America/Sao_Paulo')::date
+       and (d.vigencia_fim is null or d.vigencia_fim >= (now() at time zone 'America/Sao_Paulo')::date)
        and (${q} = '' or d.codigo ilike ${padrao} escape '\\' or d.nome ilike ${padrao} escape '\\')
      order by d.codigo
      limit ${limite}`);

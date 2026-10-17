@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { codigoContabil, motivoContabil, textoContabil } from '../../texto';
 
-const codigo = z.string().trim().min(1).max(32);
-const texto180 = z.string().trim().min(1).max(180);
-const motivo = z.string().trim().min(1).max(2000);
+const codigo = codigoContabil;
+const texto180 = textoContabil(1, 180);
+const busca = textoContabil(0, 180);
+const motivo = motivoContabil;
 export function dataCalendarioValida(valor: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
   const [ano, mes, dia] = valor.split('-').map(Number) as [number, number, number];
@@ -34,33 +36,33 @@ const criarContaCampos = z.object({
 const vigenciaCoerente = (d: { vigenciaInicio: string; vigenciaFim: string | null }) =>
   d.vigenciaFim === null || d.vigenciaFim >= d.vigenciaInicio;
 
-export const criarContaSchema = criarContaCampos.refine(vigenciaCoerente, {
-  message: 'Fim de vigência anterior ao início de vigência',
-});
+const VIGENCIA_INVERTIDA = { message: 'Fim de vigência anterior ao início de vigência', path: ['vigenciaFim'] };
+
+/** `situacao` só entra para o serviço responder 422 se não for Rascunho (plano D2): criar grava sempre DRAFT. */
+export const criarContaSchema = criarContaCampos.extend({ situacao: z.unknown().optional() })
+  .refine(vigenciaCoerente, VIGENCIA_INVERTIDA);
 
 export const listarPlanoSchema = z.object({
   pagina: z.coerce.number().int().min(1).default(1),
-  q: z.string().trim().max(180).default(''),
+  q: busca.default(''),
   situacao: z.enum(['', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED']).default(''),
   ordenar: z.enum(['contaContabil', 'naturezaConta', 'centroCusto', 'vigenciaInicio', 'vigenciaFim']).default('contaContabil'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
 });
 
-export const opcoesPaiSchema = z.object({ q: z.string().trim().max(180).default('') });
+export const opcoesPaiSchema = z.object({ q: busca.default('') });
 export type OpcoesPaiQuery = z.infer<typeof opcoesPaiSchema>;
 
 export const editarSchema = criarContaCampos.omit({ codigo: true }).extend({
   numero: z.number().int().positive(),
-}).refine(vigenciaCoerente, {
-  message: 'Fim de vigência anterior ao início de vigência',
-});
+}).refine(vigenciaCoerente, VIGENCIA_INVERTIDA);
 
 export const revisarSchema = z.object({
   numero: z.number().int().positive(),
   vigenciaInicio: dataIso,
   vigenciaFim: dataIso.nullable(),
   justificativa: motivo,
-});
+}).refine(vigenciaCoerente, VIGENCIA_INVERTIDA);
 
 export const decidirSchema = z.object({
   numero: z.number().int().positive(),

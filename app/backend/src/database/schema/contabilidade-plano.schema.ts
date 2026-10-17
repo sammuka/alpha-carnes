@@ -48,6 +48,8 @@ export const contaVersoes = pgTable(
     situacao: text('situacao').notNull(),
     justificativa: text('justificativa').notNull(),
     responsavelId: uuid('responsavel_id').notNull().references(() => usuarios.id),
+    /** Autor original da versão (quem a criou): nunca sobrescrito por editar, revisar ou aprovar (AD-39). */
+    autorId: uuid('autor_id').notNull().references(() => usuarios.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -58,6 +60,7 @@ export const contaVersoes = pgTable(
     index('idx_conta_versoes_pai').on(t.contaPaiId),
     index('idx_conta_versoes_centro').on(t.centroCustoId),
     index('idx_conta_versoes_responsavel').on(t.responsavelId),
+    index('idx_conta_versoes_autor').on(t.autorId),
     index('idx_conta_versoes_situacao').on(t.situacao).where(sql`${t.deletedAt} IS NULL`),
     check('chk_conta_versoes_classificacao', sql`${t.classificacao} IN ('sintetica','analitica')`),
     check('chk_conta_versoes_natureza', sql`${t.natureza} IN ('ATIVO','PASSIVO','RECEITA','DESPESA','CUSTO')`),

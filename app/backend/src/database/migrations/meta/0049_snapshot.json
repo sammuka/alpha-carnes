@@ -16253,6 +16253,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "autor_id": {
+          "name": "autor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -16357,6 +16363,21 @@
           "method": "btree",
           "with": {}
         },
+        "idx_conta_versoes_autor": {
+          "name": "idx_conta_versoes_autor",
+          "columns": [
+            {
+              "expression": "autor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_conta_versoes_situacao": {
           "name": "idx_conta_versoes_situacao",
           "columns": [
@@ -16420,6 +16441,19 @@
           "tableTo": "usuarios",
           "columnsFrom": [
             "responsavel_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "conta_versoes_autor_id_usuarios_id_fk": {
+          "name": "conta_versoes_autor_id_usuarios_id_fk",
+          "tableFrom": "conta_versoes",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "autor_id"
           ],
           "columnsTo": [
             "id"

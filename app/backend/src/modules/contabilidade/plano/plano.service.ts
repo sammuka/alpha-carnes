@@ -1,4 +1,4 @@
-import { ConflictException, HttpException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, HttpException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -29,11 +29,12 @@ import {
   dataCalendarioValida,
 } from './dto/plano.dto';
 import { RegraContabilException } from './regra-contabil.exception';
-import { LIMITE_OPCOES_PAI, opcoesPaiVigentes, ultimaVersaoDecidida } from './vigencia';
+import { hojeSaoPaulo, LIMITE_OPCOES_PAI, opcoesPaiVigentes, ultimaVersaoDecidida, vigenciaContida, vigenteEm } from './vigencia';
 
 type Banco = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Banco['transaction']>[0]>[0];
 export interface ContagensPlano { revisao: number; suspensos: number }
+type Vigencia = { vigenciaInicio: string; vigenciaFim: string | null };
 
 const NATUREZA_ROTULO: Record<string, string> = {
   ATIVO: 'Ativo',
@@ -99,13 +100,17 @@ export class PlanoContasService {
   }
 
   async criar(dto: CriarContaDto, usuarioId: string) {
+    // Plano D2: criar grava sempre DRAFT; outra situação enviada é recusada, não descartada em silêncio.
+    if (dto.situacao !== undefined && dto.situacao !== 'DRAFT') {
+      throw new RegraContabilException('Situação não permite esta transição');
+    }
     await this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:conta:' + dto.codigo}))`);
       const duplicada = await tx.select({ id: contasContabeis.id }).from(contasContabeis)
         .where(and(eq(contasContabeis.codigo, dto.codigo), isNull(contasContabeis.deletedAt))).limit(1);
       if (duplicada.length > 0) throw new ConflictException('Já existe conta com este código');
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
-      const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
+      const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo, dto);
       const conta = primeiroOuFalha(await tx.insert(contasContabeis).values({ codigo: dto.codigo }).returning());
       const versao = primeiroOuFalha(await tx.insert(contaVersoes).values({
         contaId: conta.id,
@@ -121,6 +126,7 @@ export class PlanoContasService {
         situacao: 'DRAFT',
         justificativa: dto.justificativa,
         responsavelId: usuarioId,
+        autorId: usuarioId,
       }).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'conta_versoes',
@@ -297,7 +303,12 @@ export class PlanoContasService {
     return centro;
   }
 
-  private async paiValido(tx: Tx, classificacao: 'sintetica' | 'analitica', contaPaiCodigo: string | null) {
+  private async paiValido(
+    tx: Tx,
+    classificacao: 'sintetica' | 'analitica',
+    contaPaiCodigo: string | null,
+    vigencia: Vigencia,
+  ) {
     if (!contaPaiCodigo) {
       if (classificacao === 'analitica') throw new RegraContabilException('Conta pai não encontrada');
       return null;
@@ -305,19 +316,68 @@ export class PlanoContasService {
     const [pai] = await tx.select().from(contasContabeis)
       .where(and(eq(contasContabeis.codigo, contaPaiCodigo), isNull(contasContabeis.deletedAt))).limit(1);
     if (!pai) throw new RegraContabilException('Conta pai não encontrada');
-    await this.exigirPaiVigente(tx, pai.id);
+    await this.exigirPaiVigente(tx, pai.id, vigencia);
     return pai.id;
   }
 
-  /** Versão vigente do pai, ou 422. Suspensa: `conta desativada`. Nunca decidida: `Conta pai não está ativa`. */
-  private async exigirPaiVigente(tx: Tx, paiId: string) {
+  /**
+   * Versão vigente do pai, ou 422. Suspensa: `conta desativada`. Nunca decidida: `Conta pai não está ativa`.
+   * Plano D3: o pai está vigente hoje (America/Sao_Paulo) e a vigência da filha cabe inteira na do pai.
+   */
+  private async exigirPaiVigente(tx: Tx, paiId: string, filha: Vigencia) {
     const decidida = await ultimaVersaoDecidida(tx, paiId);
     if (!decidida) throw new RegraContabilException('Conta pai não está ativa');
     if (decidida.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (decidida.classificacao === 'analitica') {
       throw new RegraContabilException('Conta pai analítica não é nível hierárquico válido');
     }
+    if (!vigenteEm(decidida, await hojeSaoPaulo(tx))) throw new RegraContabilException('Conta pai fora de vigência');
+    if (!vigenciaContida(filha, decidida)) {
+      throw new RegraContabilException('Vigência da conta fora da vigência da conta pai');
+    }
     return decidida;
+  }
+
+  /** Mesmo lock de aprovar e bloquear, antes do FOR UPDATE da conta (mesma ordem: sem deadlock). */
+  private async travarHierarquia(tx: Tx) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+  }
+
+  /**
+   * Plano D3, sob o lock da hierarquia: conta com filha decidida não vira analítica (analítica não é pai) e
+   * conta referenciada por política ativa (rascunho, revisão ou aprovada) não vira sintética (sintética não
+   * recebe lançamento). Vale para editar, versionar e aprovar.
+   */
+  private async exigirClassificacaoCompativel(tx: Tx, contaId: string, classificacao: string) {
+    if (classificacao === 'analitica') {
+      const filhas = await tx.execute(sql`
+        select 1
+          from (
+            select distinct on (v.conta_id) v.conta_pai_id
+              from conta_versoes v
+              join contas_contabeis c on c.id = v.conta_id
+             where c.deleted_at is null
+               and v.deleted_at is null
+               and v.situacao in ('APPROVED', 'SUSPENDED')
+             order by v.conta_id, v.numero desc
+          ) d
+         where d.conta_pai_id = ${contaId}
+         limit 1`);
+      if (filhas.rows.length > 0) throw new RegraContabilException('Conta com contas filhas não pode ser analítica');
+      return;
+    }
+    const usos = await tx.execute(sql`
+      select 1
+        from politica_versoes pv
+        join politicas_contabilizacao p on p.id = pv.politica_id
+       where p.deleted_at is null
+         and pv.deleted_at is null
+         and pv.situacao in ('DRAFT', 'REVIEW', 'APPROVED')
+         and (pv.conta_debito_id = ${contaId} or pv.conta_credito_id = ${contaId})
+       limit 1`);
+    if (usos.rows.length > 0) {
+      throw new RegraContabilException('Conta usada em política de contabilização não pode ser sintética');
+    }
   }
 
   private async recusarCiclo(tx: Tx, contaId: string, paiId: string | null) {
@@ -327,14 +387,16 @@ export class PlanoContasService {
   }
 
   /** Pai de uma versão nova ou editada: existe, é vigente e sintético, e não fecha ciclo. */
-  private async paiDaVersao(tx: Tx, contaId: string, classificacao: 'sintetica' | 'analitica', contaPaiCodigo: string | null) {
-    const paiId = await this.paiValido(tx, classificacao, contaPaiCodigo);
+  private async paiDaVersao(tx: Tx, contaId: string, dto: EditarContaDto) {
+    const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo, dto);
     await this.recusarCiclo(tx, contaId, paiId);
+    await this.exigirClassificacaoCompativel(tx, contaId, dto.classificacao);
     return paiId;
   }
 
   async editar(codigo: string, dto: EditarContaDto, usuarioId: string) {
     const salva = await this.db.transaction(async (tx) => {
+      await this.travarHierarquia(tx);
       const { atual } = await this.travar(tx, codigo, dto.numero);
       if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
@@ -343,7 +405,7 @@ export class PlanoContasService {
       }
       if (atual.situacao !== 'DRAFT') throw new RegraContabilException('Situação não permite esta transição');
       if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
-      const paiId = await this.paiDaVersao(tx, atual.contaId, dto.classificacao, dto.contaPaiCodigo);
+      const paiId = await this.paiDaVersao(tx, atual.contaId, dto);
       const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
         nome: dto.nome,
         classificacao: dto.classificacao,
@@ -397,13 +459,14 @@ export class PlanoContasService {
 
   async versionar(codigo: string, dto: EditarContaDto, usuarioId: string) {
     await this.db.transaction(async (tx) => {
+      await this.travarHierarquia(tx);
       const { conta, atual } = await this.travar(tx, codigo, dto.numero);
       if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
       if (atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW') {
         throw new ConflictException('Versão em aberto já existe');
       }
       if (atual.situacao !== 'APPROVED') throw new RegraContabilException('conta desativada');
-      const paiId = await this.paiDaVersao(tx, conta.id, dto.classificacao, dto.contaPaiCodigo);
+      const paiId = await this.paiDaVersao(tx, conta.id, dto);
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
       const nova = primeiroOuFalha(await tx.insert(contaVersoes).values({
         contaId: conta.id,
@@ -419,6 +482,7 @@ export class PlanoContasService {
         situacao: 'DRAFT',
         justificativa: dto.justificativa,
         responsavelId: usuarioId,
+        autorId: usuarioId,
       }).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'conta_versoes', registroId: nova.id, operacao: 'INSERT',
@@ -468,7 +532,11 @@ export class PlanoContasService {
           if (dto.acao === 'revisar-competencia') await this.revisarNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
         } catch (erro) {
           if (erro instanceof HttpException) {
-            throw new HttpException({ message: textoDe(erro), codigo }, erro.getStatus());
+            // `codigo` no lote é a conta que falhou; o código do erro (ex. SEGREGACAO_FUNCAO) segue em `erro`.
+            const corpo = erro.getResponse();
+            const bruto = typeof corpo === 'object' && corpo !== null ? (corpo as { codigo?: unknown }).codigo : undefined;
+            const codigoErro = typeof bruto === 'string' ? bruto : undefined;
+            throw new HttpException({ message: textoDe(erro), codigo, ...(codigoErro ? { erro: codigoErro } : {}) }, erro.getStatus());
           }
           throw erro;
         }
@@ -487,7 +555,7 @@ export class PlanoContasService {
         mensagens.push(textoDe(erro));
       }
       try {
-        await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
+        await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo, dto);
       } catch (erro) {
         mensagens.push(textoDe(erro));
       }
@@ -584,18 +652,25 @@ export class PlanoContasService {
   }
 
   private async aprovarNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
-    // Mesmo lock em aprovar e bloquear, antes do FOR UPDATE da conta (mesma ordem: sem deadlock).
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+    await this.travarHierarquia(tx);
     const { atual } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (atual.situacao !== 'REVIEW') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+    // AD-39: só o autor original da versão conta; quem editou ou revisou sem ser o autor pode aprovar.
+    if (atual.autorId === usuarioId) {
+      throw new UnprocessableEntityException({
+        message: 'A aprovação deve ser feita por usuário diferente do autor da conta.',
+        codigo: 'SEGREGACAO_FUNCAO',
+      });
+    }
     if (atual.contaPaiId) {
-      await this.exigirPaiVigente(tx, atual.contaPaiId);
+      await this.exigirPaiVigente(tx, atual.contaPaiId, atual);
       await this.recusarCiclo(tx, atual.contaId, atual.contaPaiId);
     } else if (atual.classificacao === 'analitica') {
       throw new RegraContabilException('Conta pai não encontrada');
     }
+    await this.exigirClassificacaoCompativel(tx, atual.contaId, atual.classificacao);
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'APPROVED',
       justificativa,
@@ -610,8 +685,7 @@ export class PlanoContasService {
   }
 
   private async bloquearNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
-    // Mesmo lock em aprovar e bloquear, antes do FOR UPDATE da conta (mesma ordem: sem deadlock).
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+    await this.travarHierarquia(tx);
     const { atual, versoes } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new ConflictException('conta desativada');
     const aberta = atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW' ? atual : null;

@@ -128,9 +128,9 @@ describe('Políticas de contabilização', () => {
   async function novaVersaoDaConta(codigo: string, numero: number, situacao: 'SUSPENDED' | 'DRAFT' | 'REVIEW' | 'REJECTED') {
     await db.execute(sql`
       insert into conta_versoes (conta_id, numero, nome, classificacao, natureza, grupo, conta_pai_id,
-                                 centro_custo_id, vigencia_inicio, vigencia_fim, situacao, justificativa, responsavel_id)
+                                 centro_custo_id, vigencia_inicio, vigencia_fim, situacao, justificativa, responsavel_id, autor_id)
       select v.conta_id, ${numero}, v.nome, v.classificacao, v.natureza, v.grupo, v.conta_pai_id,
-             v.centro_custo_id, v.vigencia_inicio, v.vigencia_fim, ${situacao}, 'caso de teste', v.responsavel_id
+             v.centro_custo_id, v.vigencia_inicio, v.vigencia_fim, ${situacao}, 'caso de teste', v.responsavel_id, v.autor_id
         from conta_versoes v
         join contas_contabeis c on c.id = v.conta_id
        where c.codigo = ${codigo} and v.numero = 1

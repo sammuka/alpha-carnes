@@ -7,6 +7,7 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
 import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.service';
+import { PoliticasContabilizacaoService } from '../../src/modules/contabilidade/politicas/politicas.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditoriaService } from '../../src/common/auditoria/auditoria.service';
 import { EVENTOS } from '../../src/realtime/events/eventos';
@@ -35,8 +36,10 @@ describe('Plano de contas', () => {
   let db: NodePgDatabase<typeof schema>;
   let adminId: string;
   let userId: string;
+  let aprovadorId: string;
   let service: PlanoContasService;
   let adminCookies: string;
+  let aprovadorCookies: string;
   let comercialCookies: string;
 
   beforeAll(async () => {
@@ -48,14 +51,23 @@ describe('Plano de contas', () => {
     if (!usuario) throw new Error('admin ausente');
     adminId = usuario.id;
     userId = usuario.id;
+    // Segregação (AD-39): quem aprova a versão é outro administrador, nunca o autor dela.
+    const aprovador = await createTestUser(app, { perfil: 'administrador' });
+    const [segundo] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, aprovador.adminEmail));
+    if (!segundo) throw new Error('segundo administrador ausente');
+    aprovadorId = segundo.id;
     service = app.get(PlanoContasService);
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+    aprovadorCookies = await loginCookies(app, aprovador.adminEmail, aprovador.adminPassword);
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
   });
 
   const srv = () => app.getHttpServer();
 
   beforeEach(async () => {
+    await db.execute(sql`delete from politica_simulacoes`);
+    await db.execute(sql`delete from politica_versoes`);
+    await db.execute(sql`delete from politicas_contabilizacao`);
     await db.execute(sql`delete from conta_versoes`);
     await db.execute(sql`delete from contas_contabeis`);
     await db.execute(sql`delete from centros_custo`);
@@ -79,6 +91,7 @@ describe('Plano de contas', () => {
       situacao: 'DRAFT' as const,
       justificativa: 'teste',
       responsavelId: adminId,
+      autorId: adminId,
     };
     await expect(db.insert(contaVersoes).values({
       ...base,
@@ -172,7 +185,7 @@ describe('Plano de contas', () => {
       vigenciaFim: null,
       justificativa: 'revisa',
     }, userId);
-    return service.aprovar(codigo, { numero: 1, justificativa: 'aprova' }, userId);
+    return service.aprovar(codigo, { numero: 1, justificativa: 'aprova' }, aprovadorId);
   }
 
   async function contaAprovadaSintetica() {
@@ -340,16 +353,17 @@ describe('Plano de contas', () => {
     const editada = await service.executar('editar', '1', comoEdicao(rascunho, { nome: 'Grupo editado' }), userId);
     expect(editada.nome).toBe('Grupo editado');
     await service.executar('revisar-competencia', '1', {
-      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2026-12-31', justificativa: 'revisa',
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2999-12-31', justificativa: 'revisa',
     }, userId);
-    await service.executar('aprovar', '1', { numero: 1, justificativa: 'aprova' }, userId);
+    await service.executar('aprovar', '1', { numero: 1, justificativa: 'aprova' }, aprovadorId);
+    // A vigência da filha cabe na do pai (plano D3, leitura restritiva): o pai termina em 2999-12-31.
     await service.criar(dtoBase({
-      codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1',
+      codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1', vigenciaFim: '2999-12-31',
     }), userId);
     await service.executar('revisar-competencia', '1.1', {
-      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa filha',
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2999-12-31', justificativa: 'revisa filha',
     }, userId);
-    const filha = await service.executar('aprovar', '1.1', { numero: 1, justificativa: 'aprova filha' }, userId);
+    const filha = await service.executar('aprovar', '1.1', { numero: 1, justificativa: 'aprova filha' }, aprovadorId);
     const mapeada = await service.executar('mapear', '1.1', {
       numero: filha.numero, centroCodigo: 'CT1', justificativa: 'mapeia',
     }, userId);
@@ -473,13 +487,13 @@ describe('Plano de contas', () => {
     expect(revisado).toHaveLength(1);
     const aprovado = await service.lote({
       acao: 'aprovar', codigos: ['1'], justificativa: 'aprova em lote', numeroPorCodigo: { '1': 1 },
-    }, userId);
+    }, aprovadorId);
     expect(aprovado).toHaveLength(1);
     await service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId);
     await service.revisarCompetencia('1.1', {
       numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa',
     }, userId);
-    await service.aprovar('1.1', { numero: 1, justificativa: 'aprova' }, userId);
+    await service.aprovar('1.1', { numero: 1, justificativa: 'aprova' }, aprovadorId);
     const bloqueado = await service.lote({
       acao: 'bloquear', codigos: ['1.1'], justificativa: 'bloqueia em lote', numeroPorCodigo: { '1.1': 1 },
     }, userId);
@@ -538,12 +552,12 @@ describe('Plano de contas', () => {
     await service.revisarCompetencia('1', {
       numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa',
     }, userId);
-    await expect(service.aprovar('1', { numero: 1, justificativa: '   ' }, userId))
+    await expect(service.aprovar('1', { numero: 1, justificativa: '   ' }, aprovadorId))
       .rejects.toMatchObject({ status: 422 });
-    await expect(service.aprovar('1', { numero: 1, justificativa: 'aprova' }, userId)).resolves.toMatchObject({
+    await expect(service.aprovar('1', { numero: 1, justificativa: 'aprova' }, aprovadorId)).resolves.toMatchObject({
       situacao: 'APPROVED',
     });
-    await expect(service.aprovar('1', { numero: 1, justificativa: 'de novo' }, userId))
+    await expect(service.aprovar('1', { numero: 1, justificativa: 'de novo' }, aprovadorId))
       .rejects.toMatchObject({ status: 422 });
     await expect(service.bloquear('1', { numero: 1, justificativa: '   ' }, userId))
       .rejects.toMatchObject({ status: 422 });
@@ -630,7 +644,7 @@ describe('Plano de contas', () => {
 
     it('lote com código herdado do protótipo responde 422 conflito', async () => {
       const res = await post('/contabilidade/plano/lote', {
-        acao: 'bloquear', codigos: ['constructor'], justificativa: 'ok', numeroPorCodigo: {},
+        acao: 'bloquear', codigos: ['constructor'], justificativa: 'conflito', numeroPorCodigo: {},
       });
       expect(res.status).toBe(422);
       expect(res.body.message.message).toBe('conflito concorrente');
@@ -643,7 +657,7 @@ describe('Plano de contas', () => {
     const v1 = await promover('1');
     await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
     await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
-    await service.aprovar('1', { numero: 2, justificativa: 'aprova v2' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova v2' }, aprovadorId);
     await service.bloquear('1', { numero: 2, justificativa: 'bloqueia v2' }, userId);
   }
 
@@ -668,7 +682,7 @@ describe('Plano de contas', () => {
     const v1 = await promover('1');
     await service.versionar('1', comoEdicao(v1, { classificacao: 'analitica', contaPaiCodigo: '0', justificativa: 'vira analítica' }), userId);
     await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
-    await service.aprovar('1', { numero: 2, justificativa: 'aprova' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova' }, aprovadorId);
     await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
       .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai analítica não é nível hierárquico válido' } });
   });
@@ -721,8 +735,8 @@ describe('Plano de contas', () => {
     await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
     await service.versionar('3', comoEdicao(t1, { contaPaiCodigo: '1', justificativa: '3 sob 1' }), userId);
     await service.revisarCompetencia('3', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
-    await service.aprovar('3', { numero: 2, justificativa: 'aprova 3 sob 1' }, userId);
-    await expect(service.aprovar('1', { numero: 2, justificativa: 'aprova 1 sob 3' }, userId))
+    await service.aprovar('3', { numero: 2, justificativa: 'aprova 3 sob 1' }, aprovadorId);
+    await expect(service.aprovar('1', { numero: 2, justificativa: 'aprova 1 sob 3' }, aprovadorId))
       .rejects.toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
     expect((await service.obter('1')).situacao).toBe('REVIEW');
   });
@@ -740,8 +754,8 @@ describe('Plano de contas', () => {
       await service.revisarCompetencia(codigo, { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
     }
     const resultado = await Promise.allSettled([
-      service.aprovar('A', { numero: 2, justificativa: 'aprova A' }, userId),
-      service.aprovar('B', { numero: 2, justificativa: 'aprova B' }, userId),
+      service.aprovar('A', { numero: 2, justificativa: 'aprova A' }, aprovadorId),
+      service.aprovar('B', { numero: 2, justificativa: 'aprova B' }, aprovadorId),
     ]);
     expect(resultado.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     const recusada = resultado.find((r) => r.status === 'rejected') as PromiseRejectedResult;
@@ -778,7 +792,7 @@ describe('Plano de contas', () => {
     await bloqueio;
 
     // 2) com o pai já suspenso, a aprovação do filho é recusada.
-    await expect(service.aprovar('P.1', { numero: 1, justificativa: 'aprova filho' }, userId))
+    await expect(service.aprovar('P.1', { numero: 1, justificativa: 'aprova filho' }, aprovadorId))
       .rejects.toMatchObject({ status: 422, response: { message: 'conta desativada' } });
     expect((await service.obter('P.1')).situacao).toBe('REVIEW');
   });
@@ -875,7 +889,7 @@ describe('Plano de contas', () => {
       await service.revisarCompetencia(codigo, { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
     }
     const emitir = jest.spyOn(app.get(EventEmitter2), 'emit');
-    await service.lote({ acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'aprova em lote', numeroPorCodigo: { A: 1, B: 1 } }, userId);
+    await service.lote({ acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'aprova em lote', numeroPorCodigo: { A: 1, B: 1 } }, aprovadorId);
     const aprovadas = emitir.mock.calls.filter(([evento]) => evento === EVENTOS.PLANO_CONTA_APROVADA);
     expect(aprovadas.map(([, payload]) => payload)).toEqual([
       { codigo: 'A', acao: 'aprovar', situacao: 'APPROVED' },
@@ -896,7 +910,7 @@ describe('Plano de contas', () => {
     await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
     await service.criar(dtoBase({ codigo: 'A', classificacao: 'sintetica' }), userId);
     await service.revisarCompetencia('A', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
-    const res = await request(srv()).post('/contabilidade/plano/lote').set('Cookie', adminCookies)
+    const res = await request(srv()).post('/contabilidade/plano/lote').set('Cookie', aprovadorCookies)
       .send({ acao: 'aprovar', codigos: ['A'], justificativa: 'aprova', numeroPorCodigo: { A: 1 } });
     expect(res.status).toBe(201);
     expect(res.body).toHaveLength(1);
@@ -1103,6 +1117,281 @@ describe('Plano de contas', () => {
       const res = await opcoes();
       for (const item of res.body.itens as object[]) expect(Object.keys(item).sort()).toEqual(['codigo', 'nome']);
       expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    });
+  });
+  describe('Portão A r1: classificação, vigência do pai, segregação e entrada', () => {
+    const NUL = String.fromCharCode(0);
+    const politicas = () => app.get(PoliticasContabilizacaoService);
+    const post = (url: string, corpo: unknown, cookies = adminCookies) =>
+      request(srv()).post(url).set('Cookie', cookies).send(corpo as object);
+    const autorDe = async (codigo: string, numero: number) =>
+      ((await db.execute(sql`
+        select u.email from conta_versoes v
+          join contas_contabeis c on c.id = v.conta_id
+          join usuarios u on u.id = v.autor_id
+         where c.codigo = ${codigo} and v.numero = ${numero}`)).rows[0] as { email: string } | undefined)?.email;
+
+    async function planoComPolitica() {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (const [codigo, natureza] of [['1', 'ATIVO'], ['2', 'PASSIVO']] as const) {
+        await service.criar(dtoBase({ codigo, classificacao: 'sintetica', natureza }), userId);
+        await promover(codigo);
+      }
+      await service.criar(dtoBase({ codigo: '1.1.01', classificacao: 'analitica', contaPaiCodigo: '1' }), userId);
+      const debito = await promover('1.1.01');
+      await service.criar(dtoBase({ codigo: '2.1.01', classificacao: 'analitica', contaPaiCodigo: '2', natureza: 'PASSIVO' }), userId);
+      await promover('2.1.01');
+      await politicas().configurar({
+        tipoEvento: 'LIQUIDACAO', competencia: '2026-10', contaDebitoCodigo: '1.1.01', contaCreditoCodigo: '2.1.01',
+        centroCodigo: 'CT1', vigenciaInicio: '2026-10-01', justificativa: 'abre a regra',
+      }, userId);
+      return debito;
+    }
+
+    it('sintética com filha decidida não vira analítica: versionar e editar respondem 422', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '0', classificacao: 'sintetica' }), userId);
+      await promover('0');
+      await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+      const pai = await promover('1');
+      await service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId);
+      await promover('1.1');
+      const viraAnalitica = comoEdicao(pai, { classificacao: 'analitica', contaPaiCodigo: '0', justificativa: 'vira analítica' });
+      const versionar = await post('/contabilidade/plano/1/versionar', viraAnalitica);
+      expect(versionar.status).toBe(422);
+      expect(versionar.body.message.message).toBe('Conta com contas filhas não pode ser analítica');
+      expect(await contarVersoes('1')).toBe(1);
+      // editar: o rascunho v2 ainda sintético não pode ser editado para analítica.
+      const v2 = await service.versionar('1', comoEdicao(pai, { nome: 'Grupo v2', justificativa: 'abre v2' }), userId);
+      await expect(service.editar('1', comoEdicao(v2, { classificacao: 'analitica', contaPaiCodigo: '0' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta com contas filhas não pode ser analítica' } });
+      expect((await service.obter('1')).classificacao).toBe('sintetica');
+    });
+
+    it('aprovar recusa analítica quando a filha foi aprovada depois do rascunho', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '0', classificacao: 'sintetica' }), userId);
+      await promover('0');
+      await service.criar(dtoBase({ codigo: 'X', classificacao: 'sintetica' }), userId);
+      const x = await promover('X');
+      await service.versionar('X', comoEdicao(x, { classificacao: 'analitica', contaPaiCodigo: '0', justificativa: 'vira analítica' }), userId);
+      await service.revisarCompetencia('X', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+      await service.criar(dtoBase({ codigo: 'X.1', classificacao: 'analitica', contaPaiCodigo: 'X' }), userId);
+      await promover('X.1');
+      const res = await post('/contabilidade/plano/X/aprovar', { numero: 2, justificativa: 'aprova' }, aprovadorCookies);
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe('Conta com contas filhas não pode ser analítica');
+      expect((await service.obter('X')).situacao).toBe('REVIEW');
+    });
+
+    it('analítica usada por política não vira sintética; a política aprovada segue válida', async () => {
+      const debito = await planoComPolitica();
+      const viraSintetica = comoEdicao(debito, { classificacao: 'sintetica', justificativa: 'vira sintética' });
+      const recusa = await post('/contabilidade/plano/1.1.01/versionar', viraSintetica);
+      expect(recusa.status).toBe(422);
+      expect(recusa.body.message.message).toBe('Conta usada em política de contabilização não pode ser sintética');
+      expect(await contarVersoes('1.1.01')).toBe(1);
+      // Com a política aprovada (outra pessoa aprova) a troca segue barrada; versão que não muda a classificação passa.
+      await politicas().simular('LIQUIDACAO-2026-10', { numero: 1, valor: '100.00', justificativa: 'simula' }, userId);
+      await politicas().aprovar('LIQUIDACAO-2026-10', { numero: 1, justificativa: 'aprova a regra' }, aprovadorId);
+      expect((await post('/contabilidade/plano/1.1.01/versionar', viraSintetica)).status).toBe(422);
+      const v2 = await service.versionar('1.1.01', comoEdicao(debito, { nome: 'Caixa geral', justificativa: 'renomeia' }), userId);
+      await expect(service.editar('1.1.01', comoEdicao(v2, { classificacao: 'sintetica' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta usada em política de contabilização não pode ser sintética' } });
+      await service.revisarCompetencia('1.1.01', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+      await service.aprovar('1.1.01', { numero: 2, justificativa: 'aprova v2' }, aprovadorId);
+      const politica = await politicas().obter('LIQUIDACAO-2026-10');
+      expect(politica).toMatchObject({ situacao: 'APPROVED', contaDebitoCodigo: '1.1.01', contaDebitoNome: 'Caixa geral' });
+      await expect(politicas().simular('LIQUIDACAO-2026-10', { numero: 1, valor: '10.00', justificativa: 'simula de novo' }, userId))
+        .resolves.toMatchObject({ situacao: 'APPROVED' });
+    });
+
+    it('aprovar recusa sintética quando uma política passou a usar a conta depois do rascunho', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (const [codigo, natureza] of [['1', 'ATIVO'], ['2', 'PASSIVO']] as const) {
+        await service.criar(dtoBase({ codigo, classificacao: 'sintetica', natureza }), userId);
+        await promover(codigo);
+      }
+      await service.criar(dtoBase({ codigo: '1.1.01', classificacao: 'analitica', contaPaiCodigo: '1' }), userId);
+      const debito = await promover('1.1.01');
+      await service.criar(dtoBase({ codigo: '2.1.01', classificacao: 'analitica', contaPaiCodigo: '2', natureza: 'PASSIVO' }), userId);
+      await promover('2.1.01');
+      await service.versionar('1.1.01', comoEdicao(debito, { classificacao: 'sintetica', justificativa: 'vira sintética' }), userId);
+      await service.revisarCompetencia('1.1.01', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+      await politicas().configurar({
+        tipoEvento: 'TARIFA', competencia: '2026-08', contaDebitoCodigo: '1.1.01', contaCreditoCodigo: '2.1.01',
+        centroCodigo: 'CT1', vigenciaInicio: '2026-10-01', justificativa: 'abre a regra',
+      }, userId);
+      await expect(service.aprovar('1.1.01', { numero: 2, justificativa: 'aprova' }, aprovadorId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta usada em política de contabilização não pode ser sintética' } });
+      expect((await service.obter('1.1.01')).situacao).toBe('REVIEW');
+    });
+
+    async function paisForaDeVigencia() {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '9', nome: 'Vencida', classificacao: 'sintetica', vigenciaInicio: '2020-01-01', vigenciaFim: '2020-12-31' }), userId);
+      await aprovarDireto('9');
+      await service.criar(dtoBase({ codigo: '8', nome: 'Futura', classificacao: 'sintetica', vigenciaInicio: '2099-01-01' }), userId);
+      await aprovarDireto('8');
+      await service.criar(dtoBase({ codigo: '7', nome: 'Vigente', classificacao: 'sintetica', vigenciaInicio: '2020-01-01' }), userId);
+      await aprovarDireto('7');
+    }
+
+    it('pai vencido ou futuro não aparece em opcoes-pai e é recusado como pai (criar, validar, editar, versionar)', async () => {
+      await paisForaDeVigencia();
+      const opcoes = await request(srv()).get('/contabilidade/plano/opcoes-pai').set('Cookie', adminCookies);
+      expect((opcoes.body.itens as { codigo: string }[]).map((i) => i.codigo)).toEqual(['7']);
+      for (const pai of ['9', '8']) {
+        const res = await post('/contabilidade/plano', dtoBase({ codigo: `${pai}.01`, classificacao: 'analitica', contaPaiCodigo: pai, vigenciaInicio: '2099-02-01' }));
+        expect(res.status).toBe(422);
+        expect(res.body.message.message).toBe('Conta pai fora de vigência');
+        expect((await service.validar(dtoBase({ codigo: `${pai}.02`, classificacao: 'analitica', contaPaiCodigo: pai }), userId)).mensagens)
+          .toContain('Conta pai fora de vigência');
+      }
+      await service.criar(dtoBase({ codigo: '7.1', classificacao: 'sintetica', contaPaiCodigo: '7' }), userId);
+      const rascunho = await service.obter('7.1');
+      await expect(service.editar('7.1', comoEdicao(rascunho, { contaPaiCodigo: '9' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai fora de vigência' } });
+      const aprovada = await promover('7.1');
+      await expect(service.versionar('7.1', comoEdicao(aprovada, { contaPaiCodigo: '8', justificativa: 'muda pai' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai fora de vigência' } });
+      expect(await contarVersoes('7.1')).toBe(1);
+    });
+
+    it('aprovar recusa quando o pai saiu de vigência depois do rascunho', async () => {
+      await paisForaDeVigencia();
+      await service.criar(dtoBase({ codigo: '7.1', classificacao: 'analitica', contaPaiCodigo: '7' }), userId);
+      await service.revisarCompetencia('7.1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+      await db.execute(sql`
+        update conta_versoes v set vigencia_inicio = '2019-01-01', vigencia_fim = '2019-12-31'
+          from contas_contabeis c where v.conta_id = c.id and c.codigo = '7'`);
+      await expect(service.aprovar('7.1', { numero: 1, justificativa: 'aprova' }, aprovadorId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai fora de vigência' } });
+    });
+
+    it('a vigência da filha cabe inteira na do pai', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: 'P', classificacao: 'sintetica', vigenciaInicio: '2020-01-01', vigenciaFim: '2999-12-31' }), userId);
+      await aprovarDireto('P');
+      const fora = 'Vigência da conta fora da vigência da conta pai';
+      for (const [inicio, fim] of [['2019-12-31', '2999-12-31'], ['2026-10-01', null], ['2026-10-01', '3000-01-01']] as const) {
+        await expect(service.criar(dtoBase({ codigo: 'P.1', contaPaiCodigo: 'P', vigenciaInicio: inicio, vigenciaFim: fim }), userId))
+          .rejects.toMatchObject({ status: 422, response: { message: fora } });
+      }
+      await expect(service.criar(dtoBase({ codigo: 'P.1', contaPaiCodigo: 'P', vigenciaInicio: '2020-01-01', vigenciaFim: '2999-12-31' }), userId))
+        .resolves.toMatchObject({ codigo: 'P.1', contaPaiCodigo: 'P' });
+      // revisar-competencia que estica a filha para fora do pai é barrado na aprovação.
+      await service.revisarCompetencia('P.1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'estica' }, userId);
+      await expect(service.aprovar('P.1', { numero: 1, justificativa: 'aprova' }, aprovadorId))
+        .rejects.toMatchObject({ status: 422, response: { message: fora } });
+    });
+
+    it('autor aprovando a própria versão responde 422 SEGREGACAO_FUNCAO, individual e em lote', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (const codigo of ['A', 'B']) {
+        await service.criar(dtoBase({ codigo, classificacao: 'sintetica' }), userId);
+        await service.revisarCompetencia(codigo, { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+      }
+      const individual = await post('/contabilidade/plano/A/aprovar', { numero: 1, justificativa: 'autoaprova' });
+      expect(individual.status).toBe(422);
+      expect(individual.body.message).toMatchObject({
+        codigo: 'SEGREGACAO_FUNCAO',
+        message: 'A aprovação deve ser feita por usuário diferente do autor da conta.',
+      });
+      const lote = await post('/contabilidade/plano/lote', { acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'autoaprova', numeroPorCodigo: { A: 1, B: 1 } });
+      expect(lote.status).toBe(422);
+      expect(lote.body.message).toMatchObject({ codigo: 'A', erro: 'SEGREGACAO_FUNCAO' });
+      expect((await service.obter('A')).situacao).toBe('REVIEW');
+      expect((await service.obter('B')).situacao).toBe('REVIEW');
+      const outro = await post('/contabilidade/plano/lote', { acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'outro aprova', numeroPorCodigo: { A: 1, B: 1 } }, aprovadorCookies);
+      expect(outro.status).toBe(201);
+      expect((outro.body as { situacao: string }[]).map((c) => c.situacao)).toEqual(['APPROVED', 'APPROVED']);
+    });
+
+    it('outro administrador aprova (201); o autor fica preservado após revisar e a versão nova tem o próprio autor', async () => {
+      const [admin] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.id, userId));
+      const [segundo] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.id, aprovadorId));
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+      // Quem revisou sem ser o autor pode aprovar (mesma regra da AD-25): o segundo administrador revisa e aprova.
+      await service.revisarCompetencia('1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, aprovadorId);
+      expect(await autorDe('1', 1)).toBe(admin!.email);
+      const aprovada = await post('/contabilidade/plano/1/aprovar', { numero: 1, justificativa: 'outro aprova' }, aprovadorCookies);
+      expect(aprovada.status).toBe(201);
+      expect(aprovada.body).toMatchObject({ situacao: 'APPROVED' });
+      expect(await autorDe('1', 1)).toBe(admin!.email);
+      // Versão nova aberta pelo segundo administrador: ele é o autor dela e não a aprova; o primeiro, que editou, aprova.
+      await service.versionar('1', comoEdicao(await service.obter('1'), { nome: 'Caixa v2', justificativa: 'abre v2' }), aprovadorId);
+      await service.editar('1', comoEdicao(await service.obter('1'), { nome: 'Caixa v2 ajustada' }), userId);
+      expect(await autorDe('1', 2)).toBe(segundo!.email);
+      await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+      await expect(service.aprovar('1', { numero: 2, justificativa: 'autoaprova' }, aprovadorId))
+        .rejects.toMatchObject({ status: 422, response: { codigo: 'SEGREGACAO_FUNCAO' } });
+      await expect(service.aprovar('1', { numero: 2, justificativa: 'quem editou aprova' }, userId))
+        .resolves.toMatchObject({ situacao: 'APPROVED', numero: 2 });
+      expect(await autorDe('1', 2)).toBe(segundo!.email);
+    });
+
+    it('revisar-competencia com fim antes do início responde 400 e não grava', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: 'P1' }), userId);
+      const res = await post('/contabilidade/plano/P1/revisar-competencia', {
+        numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2026-09-01', justificativa: 'revisa',
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.message.errors[0].path).toEqual(['vigenciaFim']);
+      expect((await service.obter('P1')).situacao).toBe('DRAFT');
+      // O lote não recebe vigência (usa a gravada): campos a mais são descartados e nunca chegam ao CHECK.
+      const lote = await post('/contabilidade/plano/lote', {
+        acao: 'revisar-competencia', codigos: ['P1'], justificativa: 'revisa em lote', numeroPorCodigo: { P1: 1 },
+        vigenciaInicio: '2026-10-01', vigenciaFim: '2026-09-01',
+      });
+      expect(lote.status).toBe(201);
+      expect(lote.body[0]).toMatchObject({ vigenciaInicio: '2026-10-01', vigenciaFim: null, situacao: 'REVIEW' });
+    });
+
+    it('situação diferente de Rascunho no criar responde 422 e não grava', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      const res = await post('/contabilidade/plano', { ...dtoBase({ codigo: 'S1' }), situacao: 'APPROVED' });
+      expect(res.status).toBe(422);
+      expect(await contarVersoes('S1')).toBe(0);
+      expect((await post('/contabilidade/plano', { ...dtoBase({ codigo: 'S2' }), situacao: 'DRAFT' })).status).toBe(201);
+    });
+
+    it.each([
+      ['código "."', { codigo: '.' }],
+      ['código ".."', { codigo: '..' }],
+      ['código com espaço de largura zero', { codigo: `1${String.fromCharCode(0x200b)}` }],
+      ['código com ponto no fim', { codigo: '1.' }],
+      ['código com pontos repetidos', { codigo: '1..1' }],
+      ['código com NUL', { codigo: `1${String.fromCharCode(0)}` }],
+      ['nome com NUL', { nome: `Caixa${String.fromCharCode(0)}` }],
+      ['grupo com NUL', { grupo: `Circulante${String.fromCharCode(0)}` }],
+      ['justificativa com NUL', { justificativa: `abertura${String.fromCharCode(0)}` }],
+      ['justificativa só de espaço de largura zero', { justificativa: String.fromCharCode(0x200b).repeat(5) }],
+      ['justificativa com dois caracteres visíveis', { justificativa: ' ok ' }],
+    ])('%s responde 400 e não grava', async (_nome, extra) => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      const res = await post('/contabilidade/plano', { ...dtoBase({ codigo: 'OK1' }), ...extra });
+      expect(res.status).toBe(400);
+      expect(Number((await db.execute(sql`select count(*)::int as total from contas_contabeis`)).rows[0].total)).toBe(0);
+    });
+
+    it('NUL no centro, na busca e no caminho responde 400 (nunca 500)', async () => {
+      expect((await post('/contabilidade/centros-custo', { codigo: 'C1', nome: `Centro${NUL}`, justificativa: 'abre centro' })).status).toBe(400);
+      const busca = encodeURIComponent(`a${NUL}`);
+      for (const url of [`/contabilidade/plano?q=${busca}`, `/contabilidade/plano/opcoes-pai?q=${busca}`, `/contabilidade/plano/exportar?q=${busca}`, `/contabilidade/plano/${busca}/historico`]) {
+        expect((await request(srv()).get(url).set('Cookie', adminCookies)).status).toBe(400);
+      }
+      expect((await post(`/contabilidade/plano/${busca}/aprovar`, { numero: 1, justificativa: 'aprova' })).status).toBe(400);
+    });
+
+    it('justificativa com espaço de largura zero nas pontas é aparada e gravada', async () => {
+      const zw = String.fromCharCode(0x200b);
+      const res = await post('/contabilidade/centros-custo', { codigo: 'C1', nome: 'Centro', justificativa: `${zw}abre centro${zw}` });
+      expect(res.status).toBe(201);
+      const [linha] = (await db.execute(sql`select justificativa from auditoria where tabela = 'centros_custo' order by created_at desc limit 1`)).rows as { justificativa: string }[];
+      expect(linha!.justificativa).toBe('abre centro');
     });
   });
 });
