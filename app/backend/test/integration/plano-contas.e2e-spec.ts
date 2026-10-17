@@ -1407,4 +1407,97 @@ describe('Plano de contas', () => {
       expect(linha!.justificativa).toBe('abre centro');
     });
   });
+
+  describe('Portão 2 r5: a vigência do pai cobre as filhas decididas', () => {
+    const NAO_COBRE = 'A nova vigência da conta não cobre a vigência das contas filhas';
+    const PAI_FORA_DE_HOJE = 'Conta com contas filhas ativas precisa estar vigente hoje';
+    const post = (url: string, corpo: unknown, cookies = adminCookies) =>
+      request(srv()).post(url).set('Cookie', cookies).send(corpo as object);
+
+    async function aprovarCom(codigo: string, numero: number, vigenciaInicio: string, vigenciaFim: string | null) {
+      await service.revisarCompetencia(codigo, { numero, vigenciaInicio, vigenciaFim, justificativa: 'revisa' }, userId);
+      return service.aprovar(codigo, { numero, justificativa: 'aprova' }, aprovadorId);
+    }
+
+    /** PG e a filha PG.2 aprovadas; a filha com a vigência pedida. */
+    async function paiComFilha(pai: [string, string | null], filha: [string, string | null], filhaAprovada = true) {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: 'PG', nome: 'Grupo', vigenciaInicio: pai[0], vigenciaFim: pai[1] }), userId);
+      const aprovado = await aprovarCom('PG', 1, pai[0], pai[1]);
+      await service.criar(dtoBase({ codigo: 'PG.2', classificacao: 'analitica', contaPaiCodigo: 'PG', vigenciaInicio: filha[0], vigenciaFim: filha[1] }), userId);
+      if (filhaAprovada) await aprovarCom('PG.2', 1, filha[0], filha[1]);
+      return aprovado;
+    }
+
+    const pgRes = async () => {
+      const r = await db.execute(sql`
+        select v.numero, v.situacao, v.vigencia_inicio::text as inicio from conta_versoes v
+          join contas_contabeis c on c.id = v.conta_id where c.codigo = 'PG' and v.deleted_at is null order by v.numero`);
+      return r.rows as { numero: number; situacao: string; inicio: string }[];
+    };
+
+    it('reprodução do Portão 2 r5: versionar o pai para 2099 com filha aprovada responde 422 (HTTP)', async () => {
+      const pai = await paiComFilha(['2026-01-01', null], ['2026-01-01', null]);
+      const res = await post('/contabilidade/plano/PG/versionar', comoEdicao(pai, { vigenciaInicio: '2099-01-01', justificativa: 'adia o grupo' }));
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe(NAO_COBRE);
+      expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+      expect(await contarVersoes('PG')).toBe(1);
+    });
+
+    it('filha em rascunho também conta: versionar o pai que a exclui responde 422', async () => {
+      const pai = await paiComFilha(['2026-01-01', null], ['2026-01-01', null], false);
+      await expect(service.versionar('PG', comoEdicao(pai, { vigenciaInicio: '2026-06-01', justificativa: 'encurta' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: NAO_COBRE } });
+    });
+
+    it('editar, revisar-competencia e aprovar do pai recusam a vigência que exclui a filha', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: 'PG', nome: 'Grupo', vigenciaInicio: '2026-01-01' }), userId);
+      const v1 = await aprovarCom('PG', 1, '2026-01-01', null);
+      // v2 aberta com vigência a partir de junho, antes de existir filha.
+      const v2 = await service.versionar('PG', comoEdicao(v1, { vigenciaInicio: '2026-06-01', justificativa: 'abre v2' }), userId);
+      await service.criar(dtoBase({ codigo: 'PG.2', classificacao: 'analitica', contaPaiCodigo: 'PG', vigenciaInicio: '2026-01-01' }), userId);
+      await aprovarCom('PG.2', 1, '2026-01-01', null);
+      await expect(service.editar('PG', comoEdicao(v2, { vigenciaInicio: '2026-07-01' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: NAO_COBRE } });
+      const revisar = await post('/contabilidade/plano/PG/revisar-competencia', { numero: 2, vigenciaInicio: '2099-01-01', vigenciaFim: null, justificativa: 'adia' });
+      expect(revisar.status).toBe(422);
+      expect(revisar.body.message.message).toBe(NAO_COBRE);
+      // O lote de revisão usa a vigência gravada (junho), que também exclui a filha.
+      const loteRevisar = await post('/contabilidade/plano/lote', { acao: 'revisar-competencia', codigos: ['PG'], justificativa: 'revisa em lote', numeroPorCodigo: { PG: 2 } });
+      expect(loteRevisar.status).toBe(422);
+      expect(loteRevisar.body.message).toMatchObject({ codigo: 'PG', message: NAO_COBRE });
+      // Em revisão com a vigência de junho (gravada direto, como se a filha tivesse sido aprovada depois): aprovar recusa.
+      await db.execute(sql`update conta_versoes v set situacao = 'REVIEW' from contas_contabeis c where v.conta_id = c.id and c.codigo = 'PG' and v.numero = 2`);
+      const aprovar = await post('/contabilidade/plano/PG/aprovar', { numero: 2, justificativa: 'aprova' }, aprovadorCookies);
+      expect(aprovar.status).toBe(422);
+      expect(aprovar.body.message.message).toBe(NAO_COBRE);
+      const lote = await post('/contabilidade/plano/lote', { acao: 'aprovar', codigos: ['PG'], justificativa: 'aprova em lote', numeroPorCodigo: { PG: 2 } }, aprovadorCookies);
+      expect(lote.status).toBe(422);
+      expect(lote.body.message).toMatchObject({ codigo: 'PG', message: NAO_COBRE });
+      expect((await pgRes()).map((v) => [v.numero, v.situacao, v.inicio])).toEqual([[1, 'APPROVED', '2026-01-01'], [2, 'REVIEW', '2026-06-01']]);
+    });
+
+    it('o pai não deixa de estar vigente hoje enquanto tem filha ativa, mesmo cobrindo a vigência dela', async () => {
+      const pai = await paiComFilha(['2025-01-01', null], ['2025-03-01', '2025-06-30']);
+      await expect(service.versionar('PG', comoEdicao(pai, { vigenciaFim: '2025-12-31', justificativa: 'encerra o grupo' }), userId))
+        .rejects.toMatchObject({ status: 422, response: { message: PAI_FORA_DE_HOJE } });
+      expect(await contarVersoes('PG')).toBe(1);
+    });
+
+    it('alargar a vigência do pai ou encurtá-la sem excluir filha é permitido (individual e em lote)', async () => {
+      const pai = await paiComFilha(['2026-01-01', null], ['2026-01-01', '2026-12-31']);
+      // Alarga o início para 2020: versiona, revisa e aprova.
+      await service.versionar('PG', comoEdicao(pai, { vigenciaInicio: '2020-01-01', justificativa: 'alarga' }), userId);
+      const alargado = await aprovarCom('PG', 2, '2020-01-01', null);
+      expect(alargado).toMatchObject({ situacao: 'APPROVED', vigenciaInicio: '2020-01-01', vigenciaFim: null });
+      // Encurta o fim para 2027 (a filha termina em 2026): passa, inclusive pelo lote.
+      await service.versionar('PG', comoEdicao(alargado, { vigenciaFim: '2027-12-31', justificativa: 'encurta' }), userId);
+      expect((await post('/contabilidade/plano/lote', { acao: 'revisar-competencia', codigos: ['PG'], justificativa: 'revisa em lote', numeroPorCodigo: { PG: 3 } })).status).toBe(201);
+      const lote = await post('/contabilidade/plano/lote', { acao: 'aprovar', codigos: ['PG'], justificativa: 'aprova em lote', numeroPorCodigo: { PG: 3 } }, aprovadorCookies);
+      expect(lote.status).toBe(201);
+      expect(lote.body[0]).toMatchObject({ situacao: 'APPROVED', vigenciaInicio: '2020-01-01', vigenciaFim: '2027-12-31' });
+    });
+  });
 });

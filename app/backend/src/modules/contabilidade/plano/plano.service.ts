@@ -380,6 +380,34 @@ export class PlanoContasService {
     }
   }
 
+  /**
+   * AD-39/D3 pelo lado do pai, sob o lock da hierarquia: a nova vigência da conta precisa conter a de cada
+   * filha com versão em jogo (rascunho, revisão, aprovada ou suspensa; vale a última decidida e a aberta
+   * acima dela) e, havendo filha ativa (rascunho, revisão ou aprovada), estar vigente hoje.
+   * Vale para editar, versionar, revisar-competencia e aprovar.
+   */
+  private async exigirVigenciaCobreFilhas(tx: Tx, contaId: string, vigencia: Vigencia) {
+    const filhas = await tx.execute(sql`
+      select v.situacao, v.vigencia_inicio::text as "vigenciaInicio", v.vigencia_fim::text as "vigenciaFim"
+        from conta_versoes v
+        join contas_contabeis c on c.id = v.conta_id
+       where c.deleted_at is null
+         and v.deleted_at is null
+         and v.conta_pai_id = ${contaId}
+         and v.situacao in ('DRAFT', 'REVIEW', 'APPROVED', 'SUSPENDED')
+         and v.numero >= coalesce((
+           select max(v2.numero) from conta_versoes v2
+            where v2.conta_id = v.conta_id and v2.deleted_at is null and v2.situacao in ('APPROVED', 'SUSPENDED')
+         ), 0)`);
+    const linhas = filhas.rows as (Vigencia & { situacao: string })[];
+    if (linhas.some((filha) => !vigenciaContida(filha, vigencia))) {
+      throw new RegraContabilException('A nova vigência da conta não cobre a vigência das contas filhas');
+    }
+    if (linhas.some((filha) => filha.situacao !== 'SUSPENDED') && !vigenteEm(vigencia, await hojeSaoPaulo(tx))) {
+      throw new RegraContabilException('Conta com contas filhas ativas precisa estar vigente hoje');
+    }
+  }
+
   private async recusarCiclo(tx: Tx, contaId: string, paiId: string | null) {
     if (paiId && await this.ciclo(tx, contaId, paiId)) {
       throw new RegraContabilException('Ciclo na hierarquia da conta');
@@ -391,6 +419,7 @@ export class PlanoContasService {
     const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo, dto);
     await this.recusarCiclo(tx, contaId, paiId);
     await this.exigirClassificacaoCompativel(tx, contaId, dto.classificacao);
+    await this.exigirVigenciaCobreFilhas(tx, contaId, dto);
     return paiId;
   }
 
@@ -626,6 +655,7 @@ export class PlanoContasService {
     vigenciaInicio?: string,
     vigenciaFim?: string | null,
   ) {
+    await this.travarHierarquia(tx);
     const { atual } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (atual.situacao !== 'DRAFT' && atual.situacao !== 'REJECTED') {
@@ -636,10 +666,12 @@ export class PlanoContasService {
     if (!dataCalendarioValida(inicio)) {
       throw new RegraContabilException('Início de vigência é obrigatório');
     }
+    const fim = vigenciaFim === undefined ? atual.vigenciaFim : vigenciaFim;
+    await this.exigirVigenciaCobreFilhas(tx, atual.contaId, { vigenciaInicio: inicio, vigenciaFim: fim });
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'REVIEW',
       vigenciaInicio: inicio,
-      vigenciaFim: vigenciaFim === undefined ? atual.vigenciaFim : vigenciaFim,
+      vigenciaFim: fim,
       justificativa,
       responsavelId: usuarioId,
     }).where(eq(contaVersoes.id, atual.id)).returning());
@@ -671,6 +703,7 @@ export class PlanoContasService {
       throw new RegraContabilException('Conta pai não encontrada');
     }
     await this.exigirClassificacaoCompativel(tx, atual.contaId, atual.classificacao);
+    await this.exigirVigenciaCobreFilhas(tx, atual.contaId, atual);
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'APPROVED',
       justificativa,
