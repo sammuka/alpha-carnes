@@ -83,6 +83,9 @@ test.describe('E09-T02 evidências app × protótipo', () => {
     await abrirPrototipo(proto);
     await capturar(proto, 'prototipo-lista.png', proto.locator('tr[data-row]').first());
     await capturar(proto, 'prototipo-ficha.png', proto.getByText('Trilha e responsabilização'));
+    await proto.setViewportSize({ width: 760, height: 800 });
+    await capturar(proto, 'prototipo-lista-760.png', proto.locator('tr[data-row]').first());
+    await proto.setViewportSize({ width: 1280, height: 800 });
     for (const item of ABAS_PROTOTIPO) {
       await abrirPrototipo(proto);
       await proto.getByRole('tab', { name: item.aba, exact: true }).click();
@@ -101,7 +104,12 @@ test.describe('E09-T02 evidências app × protótipo', () => {
     await expect(page.getByRole('heading', { name: TITULO, level: 1 })).toBeVisible({ timeout: 60_000 });
     await page.getByLabel('Buscar registros da lista', { exact: true }).fill(plano.debitoNome);
     await expect(page.locator('.politicas-grade tbody tr')).toHaveCount(3, { timeout: 30_000 });
+    await expect(page.getByText('Carregando…', { exact: true })).toBeHidden({ timeout: 30_000 });
     await capturar(page, 'app-lista.png', page.locator('.politicas-grade').getByText('Rascunho', { exact: true }).first());
+    // Abaixo de 800px cada linha vira cartão (Task 6): a mesma lista a 760px.
+    await page.setViewportSize({ width: 760, height: 800 });
+    await capturar(page, 'app-lista-760.png', page.locator('.politicas-grade tbody tr').first());
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.locator('.politicas-grade tbody tr').nth(1).click();
     await capturar(page, 'app-ficha.png', page.getByRole('tabpanel').getByText('Trilha e responsabilização'));
     for (const item of ABAS_APP) {
@@ -115,6 +123,11 @@ test.describe('E09-T02 evidências app × protótipo', () => {
     const drawer = page.getByRole('dialog', { name: TITULO, exact: true });
     await expect(drawer.getByLabel('Conta de débito', { exact: true }).locator('option', { hasText: plano.debitoNome })).toHaveCount(1);
     await capturar(page, 'app-drawer.png', drawer.getByRole('button', { name: 'Configurar mappings', exact: true }));
+    await drawer.getByRole('button', { name: 'Pesquisar conta de débito', exact: true }).click();
+    const lookup = page.getByRole('dialog', { name: 'Selecionar Conta de débito', exact: true });
+    await lookup.getByLabel('Pesquisar cadastro', { exact: true }).fill(plano.sufixo);
+    await capturar(page, 'app-lookup.png', lookup.getByRole('button', { name: new RegExp(plano.debitoNome) }));
+    await lookup.getByRole('button', { name: 'Fechar', exact: true }).click();
     await drawer.getByRole('button', { name: 'Voltar', exact: true }).click();
     await expect(drawer).toBeHidden();
 

@@ -101,6 +101,9 @@ test.describe('E09-T01 evidências app × protótipo', () => {
     await abrirPrototipo(proto);
     await capturar(proto, 'prototipo-lista.png', proto.locator('tr[data-row]').first());
     await capturar(proto, 'prototipo-ficha.png', proto.getByText('Trilha e responsabilização'));
+    await proto.setViewportSize({ width: 760, height: 800 });
+    await capturar(proto, 'prototipo-lista-760.png', proto.locator('tr[data-row]').first());
+    await proto.setViewportSize({ width: 1280, height: 800 });
     for (const item of ABAS_PROTOTIPO) {
       await abrirPrototipo(proto);
       await proto.getByRole('tab', { name: item.aba, exact: true }).click();
@@ -120,6 +123,10 @@ test.describe('E09-T01 evidências app × protótipo', () => {
     await page.getByLabel('Buscar registros da lista', { exact: true }).fill(plano.sufixo);
     await expect(page.locator('.plano-grade tbody tr')).toHaveCount(6, { timeout: 30_000 });
     await capturar(page, 'app-lista.png', page.locator('.plano-grade').getByText('Suspenso', { exact: true }));
+    // Abaixo de 800px cada linha vira cartão (Task 6): a mesma lista a 760px.
+    await page.setViewportSize({ width: 760, height: 800 });
+    await capturar(page, 'app-lista-760.png', page.locator('.plano-grade tbody tr').first());
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole('cell', { name: `Despesas gerais ${plano.sufixo}`, exact: true }).click();
     await capturar(page, 'app-ficha.png', page.getByRole('tabpanel').getByText('Trilha e responsabilização'));
     for (const item of ABAS_APP) {
