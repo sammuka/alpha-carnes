@@ -45,6 +45,7 @@ export function SeloSituacao({ situacao, rotulo }: { situacao: string; rotulo: s
   return <PillSituacao situacao={situacao as SituacaoEstabelecimento} rotulo={rotulo} />;
 }
 
+const SELETOR = 'h-8 rounded-md border border-border-strong bg-background px-2 text-xs';
 const LINK = cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'aria-disabled:cursor-not-allowed aria-disabled:opacity-50');
 
 /** Abaixo de 800px cada linha vira um cartão com os rótulos das colunas (`data-rotulo`); a mesma linha, o mesmo checkbox. */
@@ -61,6 +62,17 @@ export function GradeContabil<L extends { codigo: string }>({
 }: Props<L>) {
   return (
     <div className="min-w-0 space-y-2">
+      {/* Os cartões abaixo de 800px não têm cabeçalho: a ordenação por coluna passa a este seletor. */}
+      <div className="flex flex-wrap gap-2 min-[800px]:hidden">
+        <select aria-label="Ordenar por" className={SELETOR} value={ordenar} onChange={(evento) => onOrdenar(evento.target.value)}>
+          {colunas.filter((coluna) => coluna.ordenar).map((coluna) => <option key={coluna.rotulo} value={coluna.ordenar}>{coluna.rotulo}</option>)}
+        </select>
+        {/* onOrdenar na coluna ativa inverte a direção; com duas opções, toda troca é uma inversão. */}
+        <select aria-label="Direção da ordenação" className={SELETOR} value={direcao} onChange={() => onOrdenar(ordenar)}>
+          <option value="asc">Crescente</option>
+          <option value="desc">Decrescente</option>
+        </select>
+      </div>
       <div className={cn(className, 'overflow-x-auto rounded-md border border-border max-[800px]:border-0')} aria-busy={carregando}>
         <Table className="max-[800px]:block">
           <TableHeader className="max-[800px]:hidden">

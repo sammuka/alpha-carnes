@@ -70,7 +70,7 @@ export function LookupCadastro({ rotulo, busca, onBusca, opcoes, onEscolher, onF
           {opcoes.map((opcao) => (
             <button type="button" key={opcao.codigo} className="block w-full border-b border-border px-3.5 py-2.5 text-left hover:bg-surface-2" onClick={() => onEscolher(opcao)}>
               <b className="block text-xs">{opcao.nome}</b>
-              <small className="mt-1 block text-[10px] text-muted-foreground">{opcao.codigo}</small>
+              <small className="mt-1 block text-[10px] text-muted-foreground">Cadastro ativo</small>
             </button>
           ))}
         </div>

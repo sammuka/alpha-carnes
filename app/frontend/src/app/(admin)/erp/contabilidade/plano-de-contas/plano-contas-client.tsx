@@ -827,6 +827,9 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
                 <div className="flex items-stretch gap-1.5">
                   <select id="conta-centro" className={`${CONTROLE} min-w-0 flex-1`} value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
                     <option value="">Selecione</option>
+                    {form.centroCodigo && !centros.some((centro) => centro.codigo === form.centroCodigo) && (
+                      <option value={form.centroCodigo}>{selecionada?.centroCodigo === form.centroCodigo ? selecionada.centroNome : form.centroCodigo}</option>
+                    )}
                     {centros.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
                   </select>
                   <Button type="button" size="sm" variant="secondary" aria-label="Pesquisar centro de custo" title="Pesquisar cadastro pelo nome" onClick={() => void pesquisarCentros()}>Pesquisar</Button>

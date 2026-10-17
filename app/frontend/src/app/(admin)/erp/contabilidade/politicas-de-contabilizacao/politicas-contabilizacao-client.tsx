@@ -31,6 +31,7 @@ const CAMPOS_CADASTRO: Record<CampoCadastro, string> = {
   contaCreditoCodigo: 'Conta de crédito',
   centroCodigo: 'Centro de custo',
 };
+const NOME_DO_CAMPO = { contaDebitoCodigo: 'contaDebitoNome', contaCreditoCodigo: 'contaCreditoNome', centroCodigo: 'centroNome' } as const;
 /** Referência do requisito (catalogo.js, E09-T02). */
 const REFERENCIA: Array<[string, string]> = [
   ['Campos', 'evento fonte, regra débito/crédito, centro custo, imposto, versão e data'],
@@ -584,8 +585,14 @@ export function PoliticasContabilizacaoClient({
     setPagina(1);
   }
 
-  const contasVisiveis = contas.filter((conta) => conta.nome.toLowerCase().includes(busca.toLowerCase()) || !busca);
-  const centrosVisiveis = centros.filter((centro) => centro.nome.toLowerCase().includes(busca.toLowerCase()) || !busca);
+  /** Cadastro completo (a busca da lista não filtra o drawer); o valor do formulário fora da lista carregada continua visível. */
+  function opcoesDoCampo(campo: CampoCadastro): Opcao[] {
+    const lista = campo === 'centroCodigo' ? centros : contas;
+    const codigo = form[campo];
+    if (!codigo || lista.some((opcao) => opcao.codigo === codigo)) return lista;
+    const nome = selecionada?.[campo] === codigo ? selecionada[NOME_DO_CAMPO[campo]] : '';
+    return [{ codigo, nome: nome || codigo }, ...lista];
+  }
   const avisoNaTela = aviso ? <p role="status" className="rounded-md bg-info-soft p-2.5 text-xs text-info-fg">{aviso}</p> : null;
   const formularioAberto = drawer === 'criar' || drawer === 'editar';
 
@@ -749,7 +756,7 @@ export function PoliticasContabilizacaoClient({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {(['contaDebitoCodigo', 'contaCreditoCodigo', 'centroCodigo'] as const).map((campo) => {
                 const rotulo = CAMPOS_CADASTRO[campo];
-                const opcoes = campo === 'centroCodigo' ? centrosVisiveis : contasVisiveis;
+                const opcoes = opcoesDoCampo(campo);
                 return (
                   <CampoForm key={campo} rotulo={rotulo}>
                     <div className="flex items-stretch gap-1.5">

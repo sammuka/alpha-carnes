@@ -267,3 +267,14 @@ describe('lookup de conta pai: teclado e edição', () => {
     expect(await within(reaberto).findByRole('button', { name: /Nova/ })).toBeInTheDocument();
   });
 });
+
+describe('centro de custo do drawer (Portão 2 r3)', () => {
+  it('editar mostra o centro gravado no select antes de Pesquisar carregar os centros', async () => {
+    mockFetch({ itens: [] });
+    render(<PlanoContasClient inicial={[linha('1.1', 'Caixa')]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
+    const centro = document.getElementById('conta-centro') as HTMLSelectElement;
+    expect(centro.value).toBe('CT1');
+    expect(centro.selectedOptions[0]?.textContent).toBe('Operação industrial');
+  });
+});

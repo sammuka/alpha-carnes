@@ -320,3 +320,69 @@ test('Pesquisar abre o lookup das contas e do centro e a escolha preenche o form
   await expect(page.getByRole('heading', { name: 'Dados principais' })).toBeVisible();
   await admin.close();
 });
+
+test('com a busca da lista preenchida, a escolha do lookup aparece no select e é o código enviado (1280 e 760px)', async ({ browser, baseURL }) => {
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  for (const largura of [1280, 760]) {
+    await page.setViewportSize({ width: largura, height: 900 });
+    await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+    await page.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
+    await page.getByRole('button', { name: '+ Novo registro', exact: true }).click();
+    const credito = page.getByLabel('Conta de crédito', { exact: true });
+    // O select lista o cadastro completo: a busca da lista ("Caixa e bancos…") não esconde a conta de crédito.
+    await expect(credito.locator('option', { hasText: plano.creditoNome })).toHaveCount(1);
+    for (const [rotulo, nome] of [['Conta de débito', plano.debitoNome], ['Conta de crédito', plano.creditoNome], ['Centro de custo', plano.centroNome]] as const) {
+      await page.getByRole('button', { name: `Pesquisar ${rotulo.toLowerCase()}`, exact: true }).click();
+      const lookup = page.getByRole('dialog', { name: `Selecionar ${rotulo}`, exact: true });
+      await lookup.getByLabel('Pesquisar cadastro', { exact: true }).fill(nome);
+      const opcao = lookup.getByRole('button', { name: new RegExp(nome) });
+      await expect(opcao).toContainText('Cadastro ativo');
+      await opcao.click();
+      await expect(page.getByLabel(rotulo, { exact: true }).locator('option:checked')).toHaveText(nome);
+    }
+    await page.getByLabel('Tipo de ocorrência', { exact: true }).selectOption({ label: 'Liquidação' });
+    await page.getByLabel('Competência', { exact: true }).fill(competenciaUnica());
+    await page.getByLabel('Início de vigência', { exact: true }).fill(ONTEM);
+    await page.getByLabel('Justificativa auditável', { exact: true }).fill('escolhe pelo lookup');
+    const gravada = page.waitForRequest((pedido) => pedido.method() === 'POST' && new URL(pedido.url()).pathname === '/api/contabilidade/politicas');
+    await page.getByRole('button', { name: 'Configurar mappings' }).last().click();
+    const corpo = (await gravada).postDataJSON() as Record<string, string>;
+    expect(corpo.contaDebitoCodigo).toBe(`A${plano.sufixo}.1`);
+    expect(corpo.contaCreditoCodigo).toBe(`P${plano.sufixo}.1`);
+    expect(corpo.centroCodigo).toBe(plano.centroCodigo);
+    await expect(page.getByRole('heading', { name: 'Dados principais' })).toBeHidden();
+  }
+  await admin.close();
+});
+
+test('a 760px o seletor "Ordenar por" substitui o cabeçalho e recarrega a lista; a 1280px fica oculto', async ({ browser, baseURL }) => {
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  const ordenarPor = page.getByRole('combobox', { name: 'Ordenar por', exact: true });
+  const direcao = page.getByRole('combobox', { name: 'Direção da ordenação', exact: true });
+  await expect(ordenarPor).toBeHidden();
+  // A busca só consulta depois da hidratação: com a resposta, o select já tem o handler do React.
+  const hidratada = page.waitForResponse((resposta) => new URL(resposta.url()).searchParams.get('q') === plano.debitoNome);
+  await page.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
+  expect((await hidratada).ok()).toBeTruthy();
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(ordenarPor).toBeVisible();
+  await expect(direcao).toBeVisible();
+  const lista = (ordenar: string, sentido: string) => page.waitForResponse((resposta) => {
+    const url = new URL(resposta.url());
+    return url.pathname === '/api/contabilidade/politicas' && url.searchParams.get('ordenar') === ordenar && url.searchParams.get('direcao') === sentido;
+  });
+  const porDebito = lista('contaDebito', 'asc');
+  await ordenarPor.selectOption({ label: 'Conta de débito' });
+  expect((await porDebito).ok()).toBeTruthy();
+  const invertida = lista('contaDebito', 'desc');
+  await direcao.selectOption({ label: 'Decrescente' });
+  expect((await invertida).ok()).toBeTruthy();
+  await expect(page.getByText(/Ordenação por coluna/)).toBeVisible();
+  await admin.close();
+});

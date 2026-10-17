@@ -262,9 +262,18 @@ test.describe('Plano de contas', () => {
         expect(estilo.rotulo).toBe('"Conta contábil"');
         expect(estilo.largura).toBeLessThan(760);
         await expect(page.locator('.plano-grade thead')).toBeHidden();
+        // Sem cabeçalho, a ordenação por coluna passa ao seletor "Ordenar por" + direção.
+        const ordenada = page.waitForResponse((resposta) => {
+          const url = new URL(resposta.url());
+          return url.pathname === '/api/contabilidade/plano' && url.searchParams.get('direcao') === 'desc';
+        });
+        await page.getByRole('combobox', { name: 'Direção da ordenação', exact: true }).selectOption({ label: 'Decrescente' });
+        expect((await ordenada).ok()).toBeTruthy();
+        await expect(page.getByRole('combobox', { name: 'Ordenar por', exact: true })).toBeVisible();
       } else {
         expect(estilo.display).toBe('table-row');
         await expect(page.getByRole('columnheader', { name: 'Situação', exact: true })).toBeVisible();
+        await expect(page.getByRole('combobox', { name: 'Ordenar por', exact: true })).toBeHidden();
       }
       const caixa = linhas.first().getByRole('checkbox');
       await expect(caixa).toBeVisible();
@@ -275,6 +284,30 @@ test.describe('Plano de contas', () => {
       }
       await expect(page.getByText('Exigem decisão humana', { exact: true })).toBeVisible();
       await expect(page.getByText('Não gerar sucesso falso', { exact: true })).toBeVisible();
+    }
+    await page.close();
+  });
+
+  test('editar mostra no select o centro de custo gravado, antes de Pesquisar (1280 e 760px)', async ({ playwright }) => {
+    const api = await playwright.request.newContext();
+    let plano: Awaited<ReturnType<typeof criarPlanoDaJornada>>;
+    try {
+      plano = await criarPlanoDaJornada(api);
+    } finally {
+      await api.dispose();
+    }
+    const page = await adminContext.newPage();
+    for (const largura of [1280, 760]) {
+      await page.setViewportSize({ width: largura, height: 900 });
+      await page.goto('/erp/contabilidade/plano-de-contas');
+      await page.locator('.plano-grade tbody tr').first().click();
+      await page.getByRole('button', { name: 'Editar versão', exact: true }).click();
+      await expect(page.locator('#conta-centro option:checked')).toHaveText(plano.centroNome);
+      await page.getByRole('button', { name: 'Pesquisar conta contábil', exact: true }).click();
+      const lookup = page.getByRole('dialog', { name: 'Selecionar Conta contábil', exact: true });
+      await expect(lookup.getByRole('button').filter({ hasText: 'Cadastro ativo' }).first()).toBeVisible();
+      await lookup.getByRole('button', { name: 'Fechar', exact: true }).click();
+      await page.getByRole('button', { name: 'Voltar', exact: true }).click();
     }
     await page.close();
   });

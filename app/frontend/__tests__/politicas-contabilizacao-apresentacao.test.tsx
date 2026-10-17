@@ -680,3 +680,76 @@ describe('estrutura do DS v3', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+describe('selects do drawer independem da busca da lista (Portão 2 r3)', () => {
+  const CONTAS = [{ codigo: '1.1.01', nome: 'Caixa e bancos' }, { codigo: '2.1.01', nome: 'Fornecedores a pagar' }];
+  const CENTROS = [{ codigo: 'CT1', nome: 'Operação industrial' }];
+
+  function mockOpcoes() {
+    const posts: { url: string; corpo: Record<string, unknown> }[] = [];
+    const fetchMock = jest.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ url, corpo: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'));
+      }
+      if (url === '/api/contabilidade/politicas/opcoes') {
+        return { ok: true, status: 200, json: async () => ({ contas: CONTAS, centros: CENTROS }) };
+      }
+      return corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 });
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return posts;
+  }
+
+  const marcada = (rotulo: string) => (screen.getByLabelText(rotulo) as HTMLSelectElement).selectedOptions[0]?.textContent;
+
+  it('com a busca preenchida, os selects listam o cadastro completo e a escolha do lookup aparece e é a enviada', async () => {
+    const user = userEvent.setup();
+    const posts = mockOpcoes();
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    fireEvent.change(screen.getByLabelText('Buscar registros da lista'), { target: { value: 'Caixa e bancos' } });
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await waitFor(() => expect(within(screen.getByLabelText('Conta de crédito')).getAllByRole('option')).toHaveLength(3));
+    await user.click(screen.getByRole('button', { name: 'Pesquisar conta de crédito' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Selecionar Conta de crédito' })).getByRole('button', { name: /Fornecedores a pagar/ }));
+    expect(marcada('Conta de crédito')).toBe('Fornecedores a pagar');
+    await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
+    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' }).at(-1)!);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.corpo.contaCreditoCodigo).toBe('2.1.01');
+  });
+
+  it('valor gravado fora das opções carregadas aparece no select com o nome da política', async () => {
+    const user = userEvent.setup();
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ contas: [CONTAS[0]], centros: [] }) })) as unknown as typeof fetch;
+    const fora = { ...linha('LIQUIDACAO-2026-10', 'Liquidação'), contaCreditoCodigo: '9.9.99', contaCreditoNome: 'Conta encerrada' };
+    render(<PoliticasContabilizacaoClient inicial={[fora]} />);
+    await user.click(screen.getByRole('button', { name: 'Editar versão' }));
+    await waitFor(() => expect(marcada('Conta de débito')).toBe('Caixa e bancos'));
+    expect(marcada('Conta de crédito')).toBe('Conta encerrada');
+    expect(marcada('Centro de custo')).toBe('Operação industrial');
+  });
+
+  it('a segunda linha de cada opção do lookup é "Cadastro ativo", sem o código da conta', async () => {
+    const user = userEvent.setup();
+    mockOpcoes();
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await waitFor(() => expect(within(screen.getByLabelText('Conta de débito')).getAllByRole('option')).toHaveLength(3));
+    await user.click(screen.getByRole('button', { name: 'Pesquisar conta de débito' }));
+    const popup = screen.getByRole('dialog', { name: 'Selecionar Conta de débito' });
+    expect(within(popup).getAllByText('Cadastro ativo')).toHaveLength(2);
+    expect(within(popup).queryByText('1.1.01')).not.toBeInTheDocument();
+  });
+
+  it('o seletor "Ordenar por" e a direção recarregam a lista (cartões a 760px não têm cabeçalho)', async () => {
+    const fetchMock = jest.fn(async () => corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ordenar por' }), { target: { value: 'contaDebito' } });
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('ordenar=contaDebito&direcao=asc')));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Direção da ordenação' }), { target: { value: 'desc' } });
+    await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining('ordenar=contaDebito&direcao=desc')));
+    expect(within(screen.getByRole('combobox', { name: 'Ordenar por' })).queryByRole('option', { name: 'Situação' })).not.toBeInTheDocument();
+  });
+});
