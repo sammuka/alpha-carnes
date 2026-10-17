@@ -16,6 +16,8 @@ import { LookupCadastro } from '@/components/contabilidade/lookup-cadastro';
 import { CampoForm } from '@/components/fiscal/comum/campo-form';
 import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
 import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
+import { lerMensagem } from '@/components/contabilidade/mensagem-erro';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 const CHAVE_RASCUNHO = 'e09-t01-plano';
 
@@ -133,25 +135,23 @@ function quandoBr(iso: string): string {
   return data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
-function textoMensagem(message: unknown): string {
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.map(String).join(' ');
-  if (message && typeof message === 'object' && 'message' in message) {
-    return textoMensagem((message as { message: unknown }).message);
-  }
-  return '';
-}
-
-async function lerMensagem(resposta: Response): Promise<string> {
-  const texto = await resposta.text();
-  if (!texto) return '';
-  try {
-    const corpo = JSON.parse(texto) as { message?: unknown };
-    return textoMensagem(corpo.message);
-  } catch {
-    return texto;
-  }
-}
+/** Rótulo visível de cada campo do DTO, para a mensagem de validação dizer o que falta. */
+const ROTULOS_CONTA: Record<string, string> = {
+  codigo: 'Código',
+  nome: 'Conta contábil',
+  classificacao: 'Conta sintética/analítica',
+  natureza: 'Natureza da conta',
+  grupo: 'Grupo',
+  contaPaiCodigo: 'Conta contábil',
+  centroCodigo: 'Centro de custo',
+  vigenciaInicio: 'Início de vigência',
+  vigenciaFim: 'Fim de vigência',
+  justificativa: 'Motivo da alteração',
+  numero: 'Versão',
+};
+const ROTULOS_ACAO: Record<string, string> = { ...ROTULOS_CONTA, justificativa: 'Justificativa / observação' };
+const ROTULOS_CENTRO: Record<string, string> = { codigo: 'Código', nome: 'Centro de custo', justificativa: 'Motivo da alteração' };
+const JUSTIFICATIVA_CURTA = 'Informe justificativa para demonstrar a decisão auditável (mínimo de 3 caracteres).';
 
 function corpoAcao(modal: Modal, conta: ContaGrade, justificativa: string) {
   if (modal === 'revisar-competencia') {
@@ -208,7 +208,7 @@ function corpoConta(form: Formulario) {
     centroCodigo: form.centroCodigo.trim(),
     vigenciaInicio: form.vigenciaInicio,
     vigenciaFim: form.vigenciaFim.trim() || null,
-    justificativa: form.justificativa.trim(),
+    justificativa: normalizarJustificativa(form.justificativa),
   };
 }
 
@@ -255,6 +255,25 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
   const [carregandoEventos, setCarregandoEventos] = useState(false);
   const [erroEventos, setErroEventos] = useState<string | null>(null);
   const sequenciaLista = useRef(0);
+  // Guarda de envio em voo (padrão E01/T02): um clique a mais não gera segundo POST nem falso conflito.
+  const [enviando, setEnviando] = useState(false);
+  const emVoo = useRef(false);
+  // Foco volta ao botão que abriu o drawer (o Radix só devolve sozinho ao SheetTrigger).
+  const gatilhoDrawer = useRef<HTMLElement | null>(null);
+
+  async function emEnvio(tarefa: () => Promise<void>) {
+    if (emVoo.current) return;
+    emVoo.current = true;
+    setEnviando(true);
+    try {
+      await tarefa();
+    } catch {
+      setAviso('Não foi possível concluir a operação. Tente novamente.');
+    } finally {
+      emVoo.current = false;
+      setEnviando(false);
+    }
+  }
 
   const selecionada = contas.find((conta) => conta.codigo === codigoSelecionado) ?? contas[0];
 
@@ -322,10 +341,10 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
     setPagina(1);
   }
 
-  async function tratarResposta(resposta: Response, sucesso?: string) {
+  async function tratarResposta(resposta: Response, sucesso?: string, rotulos: Record<string, string> = ROTULOS_CONTA) {
     if (resposta.status === 403) return setAviso('Acesso não permitido');
     if (resposta.status === 409) return setAviso('conflito concorrente');
-    if (!resposta.ok) return setAviso(await lerMensagem(resposta));
+    if (!resposta.ok) return setAviso(await lerMensagem(resposta, rotulos));
     if (sucesso) setAviso(sucesso);
     setModal(null);
     setMotivo('');
@@ -334,10 +353,10 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
   }
 
   async function confirmar() {
-    if (!selecionada || !modal) return;
-    const justificativa = motivo.trim();
-    if (!justificativa) {
-      setAviso('Informe justificativa para demonstrar a decisão auditável.');
+    if (!selecionada || !modal || emVoo.current) return;
+    const justificativa = normalizarJustificativa(motivo);
+    if (!justificativaValida(motivo)) {
+      setAviso(JUSTIFICATIVA_CURTA);
       return;
     }
     if (modal === 'revisar-competencia' && !/^\d{4}-\d{2}-\d{2}$/.test(selecionada.vigenciaInicio)) {
@@ -345,28 +364,35 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
       return;
     }
     const lote = (modal === 'revisar-competencia' || modal === 'aprovar' || modal === 'bloquear') && marcadas.length > 1;
-    const resposta = lote
-      ? await fetch('/api/contabilidade/plano/lote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          acao: modal,
-          codigos: marcadas,
-          justificativa,
-          numeroPorCodigo: Object.fromEntries(
-            contas.filter((conta) => marcadas.includes(conta.codigo)).map((conta) => [conta.codigo, conta.numero]),
-          ),
-        }),
-      })
-      : await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/${modal}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(corpoAcao(modal, selecionada, justificativa)),
-      });
-    await tratarResposta(resposta, modal === 'aprovar' ? 'concluído com evidência' : undefined);
+    await emEnvio(async () => {
+      const resposta = lote
+        ? await fetch('/api/contabilidade/plano/lote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            acao: modal,
+            codigos: marcadas,
+            justificativa,
+            numeroPorCodigo: Object.fromEntries(
+              contas.filter((conta) => marcadas.includes(conta.codigo)).map((conta) => [conta.codigo, conta.numero]),
+            ),
+          }),
+        })
+        : await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/${modal}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpoAcao(modal, selecionada, justificativa)),
+        });
+      await tratarResposta(resposta, modal === 'aprovar' ? 'concluído com evidência' : undefined, ROTULOS_ACAO);
+    });
+  }
+
+  function lembrarGatilho() {
+    gatilhoDrawer.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }
 
   function abrirCriar() {
+    lembrarGatilho();
     setForm(FORM_VAZIO);
     setFormBase(JSON.stringify(FORM_VAZIO));
     setDrawer('criar');
@@ -391,6 +417,7 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
 
   function abrirEditar() {
     if (!selecionada) return;
+    lembrarGatilho();
     const preenchido = formularioDe(selecionada);
     setForm(preenchido);
     setFormBase(JSON.stringify(preenchido));
@@ -407,6 +434,7 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
   }
 
   function voltar() {
+    if (emVoo.current) return;
     if (drawer && JSON.stringify(form) !== formBase) {
       if (!window.confirm('Há alterações não salvas. Deseja sair?')) return;
     }
@@ -487,10 +515,10 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
     const resposta = await fetch('/api/contabilidade/centros-custo', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(centroNovo),
+      body: JSON.stringify({ ...centroNovo, justificativa: normalizarJustificativa(centroNovo.justificativa) }),
     });
     if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
+      setAviso(await lerMensagem(resposta, ROTULOS_CENTRO));
       return;
     }
     setForm((atual) => ({ ...atual, centroCodigo: centroNovo.codigo.trim() }));
@@ -499,34 +527,43 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
   }
 
   async function salvarConta() {
+    if (emVoo.current) return;
+    if (!justificativaValida(form.justificativa)) {
+      setAviso(JUSTIFICATIVA_CURTA);
+      return;
+    }
     const corpo = corpoConta(form);
-    const resposta = drawer === 'editar' && selecionada
-      ? await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/editar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...corpo, codigo: undefined, numero: selecionada.numero }),
-      })
-      : await fetch('/api/contabilidade/plano', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(corpo),
-      });
-    if (resposta.ok) setCodigoSelecionado(corpo.codigo || selecionada?.codigo || '');
-    await tratarResposta(resposta);
+    await emEnvio(async () => {
+      const resposta = drawer === 'editar' && selecionada
+        ? await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/editar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...corpo, codigo: undefined, numero: selecionada.numero }),
+        })
+        : await fetch('/api/contabilidade/plano', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(corpo),
+        });
+      if (resposta.ok) setCodigoSelecionado(corpo.codigo || selecionada?.codigo || '');
+      await tratarResposta(resposta);
+    });
   }
 
   async function validar() {
-    const resposta = await fetch('/api/contabilidade/plano/validar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpoConta(form.codigo ? form : (selecionada ? formularioDe(selecionada) : form))),
+    await emEnvio(async () => {
+      const resposta = await fetch('/api/contabilidade/plano/validar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpoConta(form.codigo ? form : (selecionada ? formularioDe(selecionada) : form))),
+      });
+      if (!resposta.ok) {
+        setAviso(await lerMensagem(resposta, ROTULOS_CONTA));
+        return;
+      }
+      const corpo = await resposta.json() as { valido?: boolean; mensagens?: string[] };
+      setAviso(corpo.valido ? 'concluído com evidência' : (corpo.mensagens ?? []).join(' '));
     });
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
-      return;
-    }
-    const corpo = await resposta.json() as { valido?: boolean; mensagens?: string[] };
-    setAviso(corpo.valido ? 'concluído com evidência' : (corpo.mensagens ?? []).join(' '));
   }
 
   async function consultarHistorico(destino: Aba) {
@@ -765,7 +802,15 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
         <SheetContent
           aria-describedby={undefined}
           className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]"
-          onEscapeKeyDown={(evento) => { if (lookupPai) evento.preventDefault(); }}
+          onEscapeKeyDown={(evento) => { if (lookupPai || emVoo.current) evento.preventDefault(); }}
+          onInteractOutside={(evento) => { if (emVoo.current) evento.preventDefault(); }}
+          onCloseAutoFocus={(evento) => {
+            const gatilho = gatilhoDrawer.current;
+            if (gatilho?.isConnected) {
+              evento.preventDefault();
+              gatilho.focus();
+            }
+          }}
         >
           <SheetHeader className="border-b border-border p-5">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Contabilidade</span>
@@ -856,9 +901,9 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
             {!modal && avisoNaTela}
           </div>
           <SheetFooter className="flex-row justify-end border-t border-border px-5 py-3">
-            <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
-            <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
-            <Button type="button" onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</Button>
+            <Button type="button" variant="secondary" disabled={enviando} onClick={voltar}>Voltar</Button>
+            <Button type="button" variant="secondary" disabled={enviando} onClick={() => void validar()}>Verificar dados</Button>
+            <Button type="button" disabled={enviando} aria-busy={enviando || undefined} onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</Button>
           </SheetFooter>
           {lookupPai && (
             <LookupCadastro
@@ -875,7 +920,7 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
         </SheetContent>
       </Sheet>
 
-      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) { setModal(null); setAviso(''); } }}>
+      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto && !emVoo.current) { setModal(null); setAviso(''); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Ação do domínio: {modal ? TITULOS_MODAL[modal] : ''}</DialogTitle>
@@ -888,8 +933,8 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
             {avisoNaTela}
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => { setModal(null); setAviso(''); }}>Cancelar</Button>
-            <Button type="button" onClick={() => void confirmar()}>Confirmar</Button>
+            <Button type="button" variant="ghost" disabled={enviando} onClick={() => { setModal(null); setAviso(''); }}>Cancelar</Button>
+            <Button type="button" disabled={enviando} aria-busy={enviando || undefined} onClick={() => void confirmar()}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

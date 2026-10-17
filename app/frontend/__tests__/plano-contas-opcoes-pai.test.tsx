@@ -85,6 +85,8 @@ describe('lookup de conta pai (padrão Pesquisar do protótipo)', () => {
     expect(screen.queryByRole('dialog', { name: 'Selecionar Conta contábil' })).not.toBeInTheDocument();
     expect(campoPai()).toHaveValue('P99');
     expect(campoPai()).toHaveDisplayValue('Pai de outra página');
+    // A justificativa (>= 3 visíveis) é conferida antes do envio.
+    await userEvent.type(screen.getByLabelText('Motivo da alteração'), 'cria a filha');
     // Há dois botões "Criar" (ação da grade e botão do drawer); o do drawer é o último, como no Playwright.
     await userEvent.click(screen.getAllByRole('button', { name: 'Criar' }).at(-1)!);
     await waitFor(() => expect(posts.find((post) => post.url === '/api/contabilidade/plano')?.corpo).toContain('"contaPaiCodigo":"P99"'));
