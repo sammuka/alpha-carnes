@@ -31,6 +31,9 @@ export default defineConfig({
   timeout: 600_000,
   retries: 0,
   workers: 1,
+  // next dev compila cada rota BFF na 1ª chamada (3–5,3 s medidos em servidor frio); os 5 s padrão
+  // do expect ficam no limite e a asserção vence antes de a ficha chegar.
+  expect: { timeout: 15_000 },
   reporter: [['list']],
   use: {
     baseURL: frontendUrl,
