@@ -1346,8 +1346,21 @@ describe('Plano de contas', () => {
         acao: 'revisar-competencia', codigos: ['P1'], justificativa: 'revisa em lote', numeroPorCodigo: { P1: 1 },
         vigenciaInicio: '2026-10-01', vigenciaFim: '2026-09-01',
       });
-      expect(lote.status).toBe(201);
-      expect(lote.body[0]).toMatchObject({ vigenciaInicio: '2026-10-01', vigenciaFim: null, situacao: 'REVIEW' });
+      expect(lote.status).toBe(400);
+      expect(lote.body.message.errors[0]).toMatchObject({
+        path: ['vigenciaInicio'],
+        message: 'O lote não aceita vigência: cada conta usa a vigência gravada.',
+      });
+      expect((await service.obter('P1')).situacao).toBe('DRAFT');
+      const desconhecido = await post('/contabilidade/plano/lote', {
+        acao: 'revisar-competencia', codigos: ['P1'], justificativa: 'revisa em lote', numeroPorCodigo: { P1: 1 }, extra: 1,
+      });
+      expect(desconhecido.status).toBe(400);
+      const valido = await post('/contabilidade/plano/lote', {
+        acao: 'revisar-competencia', codigos: ['P1'], justificativa: 'revisa em lote', numeroPorCodigo: { P1: 1 },
+      });
+      expect(valido.status).toBe(201);
+      expect(valido.body[0]).toMatchObject({ vigenciaInicio: '2026-10-01', vigenciaFim: null, situacao: 'REVIEW' });
     });
 
     it('situação diferente de Rascunho no criar responde 422 e não grava', async () => {

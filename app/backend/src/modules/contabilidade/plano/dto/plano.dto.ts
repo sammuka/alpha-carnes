@@ -84,11 +84,16 @@ export const acaoSchema = {
   mapear: mapearSchema,
 } as const;
 
-export const loteSchema = z.object({
+const VIGENCIA_NO_LOTE = 'O lote não aceita vigência: cada conta usa a vigência gravada.';
+
+/** Estrito: campo a mais responde 400 em vez de ser descartado em silêncio (vigência com mensagem própria). */
+export const loteSchema = z.strictObject({
   acao: z.enum(['revisar-competencia', 'aprovar', 'bloquear']),
   codigos: z.array(codigo).min(1).max(20),
   justificativa: motivo,
   numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
+  vigenciaInicio: z.never({ error: VIGENCIA_NO_LOTE }).optional(),
+  vigenciaFim: z.never({ error: VIGENCIA_NO_LOTE }).optional(),
 });
 
 export type CriarCentroDto = z.infer<typeof criarCentroSchema>;
