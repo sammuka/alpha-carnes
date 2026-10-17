@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { codigoReferencia, motivoContabil, textoContabil } from '../../texto';
 
-const codigo = z.string().trim().min(1).max(32);
-const motivo = z.string().trim().min(1).max(2000);
+const codigo = codigoReferencia;
+const motivo = motivoContabil;
 function dataNoCalendario(valor: string): boolean {
   const [ano, mes, dia] = valor.split('-').map(Number);
   if (!ano || !mes || !dia) return false;
@@ -65,7 +66,7 @@ export const loteSchema = loteBase.superRefine((dto, ctx) => {
 
 export const listarPoliticasSchema = z.object({
   pagina: z.coerce.number().int().min(1).max(100000).default(1),
-  q: z.string().trim().max(180).default(''),
+  q: textoContabil(0, 180).default(''),
   situacao: z.enum(['', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED']).default(''),
   competencia: z.union([z.literal(''), competencia]).default(''),
   ordenar: z.enum(['competencia', 'contaDebito', 'contaCredito', 'centroCusto', 'tipoEvento']).default('competencia'),

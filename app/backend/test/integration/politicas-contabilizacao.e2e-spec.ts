@@ -647,7 +647,10 @@ describe('entrada inválida responde 400 e não grava', () => {
       expect(editada.contaCreditoCodigo).toBe('1.1.01');
       expect(editada.situacao).toBe('DRAFT');
       const historico = await service.historico(politica.codigo);
-      expect(historico.map((h) => h.acontecimento)).toEqual(['Editar versão', 'Configurar mappings']);
+      expect(historico.map((h) => h.acontecimento)).toEqual([
+        'Editar versão — Início de vigência: 01/10/2026 → 02/10/2026; Conta de débito: 1.1.01 → 2.1.01; Conta de crédito: 2.1.01 → 1.1.01',
+        'Configurar mappings',
+      ]);
       expect(historico[0]?.justificativa).toBe('inverte as contas');
     });
 
@@ -723,7 +726,9 @@ describe('entrada inválida responde 400 e não grava', () => {
       await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
       await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
       const historico = await service.historico(politica.codigo);
-      expect(historico.map((h) => h.acontecimento)).toEqual(['Aprovar regra', 'Simular evento', 'Configurar mappings']);
+      expect(historico.map((h) => h.acontecimento)).toEqual([
+        'Aprovar regra — Situação: Rascunho → Aprovado', 'Simular evento — Valor: R$ 10,00', 'Configurar mappings',
+      ]);
       expect(historico.every((h) => h.quem !== '' && h.quando !== '')).toBe(true);
     });
 
@@ -859,6 +864,91 @@ describe('entrada inválida responde 400 e não grava', () => {
       const opcoes = await service.listarOpcoes();
       expect(opcoes.contas.map((c) => c.codigo)).toEqual(['1.1.01', '2.1.01']);
       expect(opcoes.centros.map((c) => c.codigo)).toEqual(['CT1']);
+    });
+  });
+  describe('Portão A r1: auditoria antes/depois e entrada', () => {
+    const NUL = String.fromCharCode(0);
+    const ultimaAuditoria = async (acao: string) =>
+      (await db.execute(sql`
+        select dados_anteriores, dados_novos from auditoria
+         where modulo = 'contabilidade.politicas' and dados_novos->>'acao' = ${acao}
+         order by created_at desc, id desc limit 1`)).rows[0] as { dados_anteriores: Record<string, unknown>; dados_novos: Record<string, unknown> };
+
+    async function planoComAlternativas() {
+      await prepararContasAnaliticas();
+      await plano.criar(dtoConta({ codigo: '1.9', classificacao: 'analitica', contaPaiCodigo: '1', nome: 'Bancos' }), autorId);
+      await aprovarDireto('1.9');
+      await plano.criarCentro({ codigo: 'C2', nome: 'Administrativo', justificativa: 'abre centro' }, autorId);
+    }
+
+    it('configurar grava tipo, competência, vigência, contas e centro por código, sem id', async () => {
+      await planoComAlternativas();
+      await service.configurar(dtoConfigurar(), autorId);
+      const { dados_anteriores: antes, dados_novos: novos } = await ultimaAuditoria('configurar');
+      expect(antes).toEqual({});
+      expect(novos).toEqual({
+        acao: 'configurar', codigo: 'LIQUIDACAO-2026-10', tipoEvento: 'LIQUIDACAO', competencia: '2026-10',
+        vigenciaInicio: '2026-10-01', contaDebito: '1.1.01', contaCredito: '2.1.01', centroCusto: 'CT1',
+        situacao: 'DRAFT', numero: 1,
+      });
+    });
+
+    it('editar débito e centro grava antes e depois na auditoria e o histórico mostra a troca', async () => {
+      await planoComAlternativas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await service.editar(politica.codigo, {
+        numero: 1, contaDebitoCodigo: '1.9', contaCreditoCodigo: '2.1.01', centroCodigo: 'C2',
+        vigenciaInicio: '2026-10-01', justificativa: 'troca débito e centro',
+      }, outraPessoaId);
+      const { dados_anteriores: antes, dados_novos: novos } = await ultimaAuditoria('editar');
+      expect(antes).toMatchObject({ contaDebito: '1.1.01', centroCusto: 'CT1', contaCredito: '2.1.01', situacao: 'DRAFT', numero: 1 });
+      expect(novos).toMatchObject({ acao: 'editar', contaDebito: '1.9', centroCusto: 'C2', contaCredito: '2.1.01', situacao: 'DRAFT', numero: 1 });
+      expect(JSON.stringify([antes, novos])).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      const [ultimo] = await service.historico(politica.codigo);
+      expect(ultimo?.acontecimento).toBe('Editar versão — Conta de débito: 1.1.01 → 1.9; Centro de custo: CT1 → C2');
+      const res = await request(srv()).get(`/contabilidade/politicas/${politica.codigo}/historico`).set('Cookie', adminCookies);
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    });
+
+    it('simular grava valor e resultado; aprovar grava a situação antes e depois', async () => {
+      await planoComAlternativas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await service.simular(politica.codigo, { numero: 1, valor: '1234.56', justificativa: 'simula' }, autorId);
+      const simulacao = await ultimaAuditoria('simular');
+      expect(simulacao.dados_novos).toMatchObject({
+        acao: 'simular', valor: '1234.56', resultado: { debito: '1234.56', credito: '1234.56' },
+        contaDebito: '1.1.01', contaCredito: '2.1.01', centroCusto: 'CT1', numero: 1,
+      });
+      await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+      const aprovacao = await ultimaAuditoria('aprovar');
+      expect(aprovacao.dados_anteriores).toMatchObject({ situacao: 'DRAFT', contaDebito: '1.1.01', numero: 1 });
+      expect(aprovacao.dados_novos).toMatchObject({ acao: 'aprovar', situacao: 'APPROVED', contaDebito: '1.1.01', numero: 1 });
+      const [aprovar, simular] = await service.historico(politica.codigo);
+      expect(aprovar?.acontecimento).toBe('Aprovar regra — Situação: Rascunho → Aprovado');
+      expect(simular?.acontecimento).toBe('Simular evento — Valor: R$ 1.234,56');
+    });
+
+    it.each([
+      ['justificativa com NUL', { justificativa: `abre${NUL}` }],
+      ['justificativa só de espaço de largura zero', { justificativa: String.fromCharCode(0x200b).repeat(4) }],
+      ['conta de débito com NUL', { contaDebitoCodigo: `1.1.01${NUL}` }],
+      ['centro com NUL', { centroCodigo: `CT1${NUL}` }],
+    ])('configurar com %s responde 400 e não grava', async (_nome, extra) => {
+      await prepararContasAnaliticas();
+      const res = await request(srv()).post('/contabilidade/politicas').set('Cookie', adminCookies).send({ ...dtoConfigurar(), ...extra });
+      expect(res.status).toBe(400);
+      expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+    });
+
+    it('NUL na busca e no caminho responde 400 (nunca 500)', async () => {
+      const nul = encodeURIComponent(NUL);
+      for (const url of [`/contabilidade/politicas?q=${nul}`, `/contabilidade/politicas/exportar?q=${nul}`, `/contabilidade/politicas/X${nul}/historico`]) {
+        expect((await request(srv()).get(url).set('Cookie', adminCookies)).status).toBe(400);
+      }
+      const acao = await request(srv()).post(`/contabilidade/politicas/X${nul}/aprovar`).set('Cookie', adminCookies)
+        .send({ numero: 1, justificativa: 'aprova' });
+      expect(acao.status).toBe(400);
     });
   });
 });

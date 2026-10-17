@@ -176,12 +176,50 @@ const ROTULO_ACAO: Record<string, string> = {
   aprovar: 'Aprovar regra',
 };
 
-function acontecimentoDe(dados: unknown, operacao: string) {
-  if (dados && typeof dados === 'object' && 'acao' in dados) {
-    const acao = String((dados as { acao: unknown }).acao);
-    if (ROTULO_ACAO[acao]) return ROTULO_ACAO[acao];
-  }
-  return operacao;
+/** Campos de negócio gravados antes/depois na auditoria (Princípio IV), na ordem em que o histórico mostra a troca. */
+interface RetratoPolitica {
+  codigo: string;
+  tipoEvento: string;
+  competencia: string;
+  vigenciaInicio: string;
+  contaDebito: string | null;
+  contaCredito: string | null;
+  centroCusto: string | null;
+  situacao: string;
+  numero: number;
+}
+
+const ROTULO_CAMPO: Array<[keyof RetratoPolitica, string, (valor: string) => string]> = [
+  ['tipoEvento', 'Tipo de ocorrência', (v) => TIPO_ROTULO[v] ?? v],
+  ['competencia', 'Competência', (v) => competenciaRotulo(`${v}-01`)],
+  ['vigenciaInicio', 'Início de vigência', (v) => v.split('-').reverse().join('/')],
+  ['contaDebito', 'Conta de débito', (v) => v],
+  ['contaCredito', 'Conta de crédito', (v) => v],
+  ['centroCusto', 'Centro de custo', (v) => v],
+  ['situacao', 'Situação', (v) => SITUACAO_ROTULO[v] ?? v],
+  ['numero', 'Versão', (v) => v],
+];
+
+/** '1234.56' → 'R$ 1.234,56' sem passar por float (o valor tem até 13 dígitos inteiros). */
+function brl(valor: string): string {
+  const [inteiro = '', decimal = '00'] = valor.split('.');
+  return `R$ ${inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${decimal}`;
+}
+
+/** Rótulo da ação e, quando houve, a troca de cada campo ("Conta de débito: 1.1.01 → 1.9"), só com códigos de negócio. */
+function acontecimentoDe(antes: unknown, dados: unknown, operacao: string) {
+  if (!dados || typeof dados !== 'object' || !('acao' in dados)) return operacao;
+  const novos = dados as Record<string, unknown>;
+  const rotulo = ROTULO_ACAO[String(novos.acao)];
+  if (!rotulo) return operacao;
+  const anteriores = (antes && typeof antes === 'object' ? antes : {}) as Record<string, unknown>;
+  const trocas = ROTULO_CAMPO.flatMap(([campo, nome, formatar]) => {
+    if (!(campo in anteriores) || !(campo in novos) || anteriores[campo] === novos[campo]) return [];
+    const texto = (valor: unknown) => (valor === null || valor === undefined ? '—' : formatar(String(valor)));
+    return [`${nome}: ${texto(anteriores[campo])} → ${texto(novos[campo])}`];
+  });
+  if (novos.acao === 'simular' && typeof novos.valor === 'string') trocas.push(`Valor: ${brl(novos.valor)}`);
+  return trocas.length > 0 ? `${rotulo} — ${trocas.join('; ')}` : rotulo;
 }
 
 @Injectable()
@@ -204,6 +242,7 @@ export class PoliticasContabilizacaoService {
       throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
     }
     await this.db.transaction(async (tx) => {
+      await this.travarHierarquia(tx);
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:politica:' + codigo}))`);
       const duplicada = await tx.select({ codigo: politicasContabilizacao.codigo }).from(politicasContabilizacao)
         .where(and(eq(politicasContabilizacao.codigo, codigo), isNull(politicasContabilizacao.deletedAt))).limit(1);
@@ -235,7 +274,7 @@ export class PoliticasContabilizacaoService {
         modulo: 'contabilidade.politicas',
         usuarioId,
         dadosAnteriores: {},
-        dadosNovos: { codigo, tipoEvento: dto.tipoEvento, competencia: dto.competencia, numero: 1, acao: 'configurar' },
+        dadosNovos: { ...(await this.retrato(tx, politica, versao)), acao: 'configurar' },
         justificativa: dto.justificativa,
       });
     });
@@ -248,6 +287,7 @@ export class PoliticasContabilizacaoService {
       throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
     }
     await this.db.transaction(async (tx) => {
+      await this.travarHierarquia(tx);
       const { politica, versao } = await this.travar(tx, codigo, dto.numero);
       if (
         (dto.tipoEvento !== undefined && dto.tipoEvento !== politica.tipoEvento)
@@ -274,8 +314,8 @@ export class PoliticasContabilizacaoService {
         operacao: 'UPDATE',
         modulo: 'contabilidade.politicas',
         usuarioId,
-        dadosAnteriores: { numero: versao.numero, situacao: versao.situacao },
-        dadosNovos: { codigo, numero: nova.numero, situacao: nova.situacao, acao: 'editar' },
+        dadosAnteriores: await this.retrato(tx, politica, versao),
+        dadosNovos: { ...(await this.retrato(tx, politica, nova)), acao: 'editar' },
         justificativa: dto.justificativa,
       });
     });
@@ -333,6 +373,7 @@ export class PoliticasContabilizacaoService {
     const linhas = await this.db.select({
       quando: auditoria.createdAt,
       quem: usuarios.nome,
+      dadosAnteriores: auditoria.dadosAnteriores,
       dadosNovos: auditoria.dadosNovos,
       operacao: auditoria.operacao,
       justificativa: auditoria.justificativa,
@@ -343,7 +384,7 @@ export class PoliticasContabilizacaoService {
     return linhas.map((linha) => ({
       quando: instante(linha.quando),
       quem: linha.quem ?? '',
-      acontecimento: acontecimentoDe(linha.dadosNovos, linha.operacao),
+      acontecimento: acontecimentoDe(linha.dadosAnteriores, linha.dadosNovos, linha.operacao),
       justificativa: linha.justificativa ?? '',
     }));
   }
@@ -547,7 +588,7 @@ export class PoliticasContabilizacaoService {
   private async simularNaTx(tx: Tx, codigo: string, dto: SimularPoliticaDto, usuarioId: string) {
     if (!dto.justificativa.trim()) throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
     if (centavos(dto.valor, codigo) <= 0n) throw new RegraPoliticaException('valor deve ser maior que zero', codigo);
-    const { versao } = await this.travar(tx, codigo, dto.numero);
+    const { politica, versao } = await this.travar(tx, codigo, dto.numero);
     if (versao.situacao !== 'DRAFT' && versao.situacao !== 'APPROVED') {
       throw new ConflitoPoliticaException('conflito concorrente', codigo);
     }
@@ -583,7 +624,12 @@ export class PoliticasContabilizacaoService {
       modulo: 'contabilidade.politicas',
       usuarioId,
       dadosAnteriores: {},
-      dadosNovos: { codigo, numero: versao.numero, acao: 'simular', valor: dto.valor },
+      dadosNovos: {
+        ...(await this.retrato(tx, politica, versao)),
+        acao: 'simular',
+        valor: simulacao.valor,
+        resultado: { debito: simulacao.debito, credito: simulacao.credito },
+      },
       justificativa: dto.justificativa,
     });
     return versao.situacao;
@@ -591,7 +637,7 @@ export class PoliticasContabilizacaoService {
 
   private async aprovarNaTx(tx: Tx, codigo: string, dto: AprovarPoliticaDto, usuarioId: string) {
     if (!dto.justificativa.trim()) throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
-    const { versao } = await this.travar(tx, codigo, dto.numero);
+    const { politica, versao } = await this.travar(tx, codigo, dto.numero);
     if (versao.situacao !== 'DRAFT') throw new ConflitoPoliticaException('conflito concorrente', codigo);
     if (usuarioId === versao.responsavelId) {
       throw new RegraPoliticaException('aprovador diferente do autor', codigo);
@@ -625,10 +671,39 @@ export class PoliticasContabilizacaoService {
       operacao: 'UPDATE',
       modulo: 'contabilidade.politicas',
       usuarioId,
-      dadosAnteriores: { situacao: versao.situacao, numero: versao.numero },
-      dadosNovos: { codigo, numero: nova.numero, situacao: 'APPROVED', acao: 'aprovar' },
+      dadosAnteriores: await this.retrato(tx, politica, versao),
+      dadosNovos: { ...(await this.retrato(tx, politica, nova)), acao: 'aprovar' },
       justificativa: dto.justificativa,
     });
+  }
+
+  /** Mesmo lock do plano de contas (aprovar/versionar): política nova não referencia conta que muda de classificação. */
+  private async travarHierarquia(tx: Tx) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+  }
+
+  /** Campos de negócio da versão para a auditoria: códigos (nunca id) de contas e centro. */
+  private async retrato(
+    tx: Tx,
+    politica: typeof politicasContabilizacao.$inferSelect,
+    versao: typeof politicaVersoes.$inferSelect,
+  ): Promise<RetratoPolitica> {
+    const contas = new Map((await tx.select({ id: contasContabeis.id, codigo: contasContabeis.codigo })
+      .from(contasContabeis).where(inArray(contasContabeis.id, [versao.contaDebitoId, versao.contaCreditoId])))
+      .map((conta) => [conta.id, conta.codigo]));
+    const [centro] = await tx.select({ codigo: centrosCusto.codigo }).from(centrosCusto)
+      .where(eq(centrosCusto.id, versao.centroCustoId)).limit(1);
+    return {
+      codigo: politica.codigo,
+      tipoEvento: politica.tipoEvento,
+      competencia: mesDe(String(politica.competencia)),
+      vigenciaInicio: String(versao.vigenciaInicio),
+      contaDebito: contas.get(versao.contaDebitoId) ?? null,
+      contaCredito: contas.get(versao.contaCreditoId) ?? null,
+      centroCusto: centro?.codigo ?? null,
+      situacao: versao.situacao,
+      numero: versao.numero,
+    };
   }
 
   private async travar(tx: Tx, codigo: string, numero: number) {

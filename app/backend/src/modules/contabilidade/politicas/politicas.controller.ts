@@ -19,6 +19,7 @@ import {
   type LotePoliticaDto,
   type SimularPoliticaDto,
 } from './dto/politicas.dto';
+import { codigoParamSchema } from '../texto';
 import { PoliticasContabilizacaoService } from './politicas.service';
 
 @SkipThrottle()
@@ -67,14 +68,14 @@ export class PoliticasContabilizacaoController {
 
   @Get(':codigo/historico')
   @RequirePermissoes('CONTABILIDADE_POLITICA_LER')
-  historico(@Param('codigo') codigo: string) {
+  historico(@Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string) {
     return this.politicas.historico(codigo);
   }
 
   @Post(':codigo/editar')
   @RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
   editar(
-    @Param('codigo') codigo: string,
+    @Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string,
     @Body(new ZodValidationPipe(editarSchema)) dto: EditarPoliticaDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
@@ -84,7 +85,7 @@ export class PoliticasContabilizacaoController {
   @Post(':codigo/simular')
   @RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
   simular(
-    @Param('codigo') codigo: string,
+    @Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string,
     @Body(new ZodValidationPipe(simularSchema)) dto: SimularPoliticaDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
@@ -94,7 +95,7 @@ export class PoliticasContabilizacaoController {
   @Post(':codigo/aprovar')
   @RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
   aprovar(
-    @Param('codigo') codigo: string,
+    @Param('codigo', new ZodValidationPipe(codigoParamSchema)) codigo: string,
     @Body(new ZodValidationPipe(aprovarSchema)) dto: AprovarPoliticaDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
