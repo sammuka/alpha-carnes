@@ -1,4 +1,4 @@
 interface:
-  display_name: "Gate de PR"
-  short_description: "Audita um PR antes do merge em develop"
+  display_name: "Gate único de PR"
+  short_description: "Gate único (AD-41): conformidade e ataque de domínio antes do merge"
   default_prompt: "Use $gate-pr para auditar a onda1 no PR informado."

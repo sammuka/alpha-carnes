@@ -1,8 +1,8 @@
 # Constituição do Projeto AlphaCarnes
 
-> **Versão:** 1.2.0 · **Status:** Vigente · **Ratificada em:** 2026-07-23 · **Emendada em:** 2026-10-11
+> **Versão:** 1.3.0 · **Status:** Vigente · **Ratificada em:** 2026-07-23 · **Emendada em:** 2026-10-17
 > Documento de princípios **inegociáveis** do projeto. Em conflito com qualquer outro documento, prática ou preferência, **esta constituição prevalece** — exceto instrução direta e explícita do Quality Owner, registrada como emenda.
-> Aplicada nos gates: todo plano (Portão 1) e todo PR (Portão 2) são auditados contra os princípios abaixo, citados por número. Ver [`pipeline-execucao.md`](pipeline-execucao.md).
+> Aplicada nos gates: todo plano (Portão 1) e todo PR (Gate único — AD-41) são auditados contra os princípios abaixo, citados por número. Ver [`pipeline-execucao.md`](pipeline-execucao.md).
 
 ---
 
@@ -73,13 +73,20 @@ Convenções de [`../data/convencoes-schema.md`](../data/convencoes-schema.md): 
 
 ## Fluxo de desenvolvimento e gates
 
-O rito completo (Plano → Portão 1 → Implementação → Portão 2 → Merge), os papéis (Executor/Monitor/Worker) e o estado vivo estão em [`pipeline-execucao.md`](pipeline-execucao.md). Os critérios objetivos por PR e a DoD por onda estão em [`quality-gates.md`](quality-gates.md). Nenhum PR entra em `develop` sem Portão 2 aprovado; nenhuma implementação começa sem Portão 1 aprovado sobre o plano tático da onda.
+O rito vigente é o **rito v2 (AD-41)**: Plano → Portão 1 → Implementação → Gate único → Merge. Papéis (Planner, Monitor, Worker, Executor), checklist do Portão 1, Gate único e estado vivo estão em [`pipeline-execucao.md`](pipeline-execucao.md); critérios objetivos por PR e DoD em [`quality-gates.md`](quality-gates.md).
+
+- **Portão 1:** checklist fixo de 10 itens sobre o plano tático (≤ 400 linhas, sem código literal), teto de 2 rodadas. Nenhuma implementação começa sem Portão 1 aprovado.
+- **Gate único:** um Monitor independente do implementador audita cada PR em duas partes — conformidade (CI 8/8 no SHA exato, diff vs. plano, DoD→teste, RA-01..06, migrations) e ataque adversarial de domínio. Nenhum PR entra em `develop` sem Gate único aprovado no head exato, e o merge é só por PR com `--match-head-commit`.
+- **BLOQUEANTE fechado em seis classes:** perda ou corrupção de dado; cálculo fiscal ou financeiro errado; bypass de RBAC ou de segregação; segredo exposto; violação de invariante escrito no plano; erro 500 em caminho de usuário. Tudo o mais é MENOR, entregue no PR de hardening do épico.
+- **Fail-closed em decisão de produto pendente:** o gate bloqueia e escala ao Quality Owner; nenhum agente decide regra de negócio.
+- **Veredito registrado como comentário no PR;** `GATE-VEREDITOS.md` é histórico congelado até a AD-40.
+- **Achado recorrente vira verificação automatizada no CI;** Playwright só no ambiente determinístico `npm run e2e:ci`.
 
 ## Governança
 
 - **Emendas:** somente o Quality Owner (usuário) emenda esta constituição. Toda emenda incrementa a versão (semver: MAJOR muda/remove princípio; MINOR adiciona; PATCH clarifica) e é registrada no log abaixo com data e motivo. Princípios marcados NÃO-NEGOCIÁVEIS exigem emenda MAJOR.
 - **Conflitos:** constituição > decisões registradas (DECISOES.md) > plano mestre > planos táticos > preferências do implementador.
-- **Dúvida no gate:** entre aprovar e reprovar, **reprova-se** (ajustar). O Monitor nunca aprova com ressalva não registrada.
+- **Dúvida no gate:** dúvida sobre a **severidade** de um achado classifica-o como MENOR com justificativa escrita (AD-41); dúvida sobre **decisão de produto** bloqueia (fail-closed). O Monitor nunca aprova com ressalva não registrada.
 
 ## Log de emendas
 
@@ -88,7 +95,11 @@ O rito completo (Plano → Portão 1 → Implementação → Portão 2 → Merge
 | 1.0.0 | 2026-07-23 | Ratificação inicial. Consolida RA-01..RA-06 (quality-gates), premissas do usuário (fidelidade ao protótipo como Princípio I; completude E2E como Princípio II) e convenções vigentes. Incorpora AD-01 (boi casado 2TZ+2DT+2PA) e AD-02 (fiscal = EISS Osasco) por referência. |
 | 1.1.0 | 2026-08-25 | MINOR — Princípio IX: autoriza o rótulo composto `Nome Fantasia/Marca` no cadastro de clientes (AD-13). “Marca” segue banida como entidade, rótulo isolado e termo de busca. |
 | 1.2.0 | 2026-10-11 | MINOR — Princípio I.1: menu 13 grupos + cofre PostgreSQL/KMS (AD-18) |
+| 1.3.0 | 2026-10-17 | MINOR — Fluxo de desenvolvimento e gates: rito v2 (AD-41). Princípios I–X inalterados. |
 
 ### Emenda AD-18 — 2026-10-11: 13 grupos, 61 interfaces de expansão e cofre PostgreSQL+KMS
 A instrução expressa do Quality Owner ratifica a extensão **sem modificar as 39 rotas operacionais da base**: os 9 grupos originais são mantidos em ordem relativa, somando-se quatro grupos `Fiscal`, `Financeiro`, `Bancos & Tesouraria`, `Contabilidade` nas posições definidas no [ADR-ERP-024](../expansao-erp-2026/24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md). A plataforma E12 integra `Administração → Integrações`, com 7 views. O referencial de fidelidade visual continua sendo **DS v3 da AD-10**; o protótipo navegável da expansão, [61 interfaces](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md), passa a integrar o contrato visual do Portão 1/2 das novas telas e **não autoriza UI mínima/MVP**. Para as 61 telas da expansão ERP, a referência de protótipo do Princípio I.3 é `docs/prototipos/erp-integrado-v1/` junto com o DS v3 (AD-10), conforme AD-18 (2); as 39 rotas operacionais seguem com sua referência anterior.
 O armazenamento de certificados/segredos é permitido no PostgreSQL apenas na forma **ciphertext AES-256-GCM gerada no backend**, com DEK cifrada e KEK externa no AWS KMS por IAM. Senha/chave privada jamais em `parametros.valorJson`, logs ou `.env`; batch lê configuração pelo DB com permissões técnicas, sem sessão do operador. AD-04 continua a fixar 11 perfis canônicos: as personas do protótipo são demonstrativas e exigem decisão separada antes de criarem seeds/perfis reais. A implementação continua obrigatoriamente sujeita aos portões, testes, PR e integração homologada.
+
+### Emenda AD-41 — 2026-10-17: rito v2 (gate único por PR, BLOQUEANTE fechado, verificações automatizadas, planos enxutos, veredito no PR)
+Aprovada pelo Quality Owner (owner `sammuka`) em 2026-10-17 com a instrução "siga este plano novo", sobre o diagnóstico do coordenador (71 vereditos para 5 fatias; 12 rodadas na E01-T02; 10 rodadas de Portão 1 na E09; 6 ADs de exceção). Revisão crítica por commit, Portão 2 e Portão A fundem-se no Gate único; BLOQUEANTE passa a ser fechado em seis classes; achados recorrentes migram para verificações automatizadas no CI; planos táticos ficam limitados a 400 linhas sem código literal; o veredito passa a ser comentário no PR. Preservados: revisor independente do implementador, fail-closed em decisão de produto pendente, CI 8/8 no SHA exato, ataque adversarial de domínio, Monitor forma a conclusão antes de ler veredito anterior, merge só por PR com `--match-head-commit` e AD-21. Os Princípios I–X não foram alterados. Vale para toda fatia a partir da E09-T03.
