@@ -50,45 +50,55 @@ urgentes.
 ## Papéis e separação obrigatória
 
 O agente raiz é apenas o coordenador. Ele delega e consolida; não escreve plano, código,
-estado ou veredito.
+estado ou veredito. Rito vigente: **rito v2 (AD-41)**, detalhado em
+`docs/governance/pipeline-execucao.md`; vale para toda fatia a partir da E09-T03 (o PR #168
+conclui no rito anterior).
 
 | Papel | Escrita autorizada | Nunca faz |
 |---|---|---|
-| `planner` | Um plano tático em `docs/superpowers/plans/` | implementar, auditar ou mudar estado |
-| `monitor` | Append em `docs/execucao/GATE-VEREDITOS.md` | implementar, corrigir plano ou mudar status |
-| `worker` | Código/testes no worktree da onda e PR correspondente | decidir regra, auditar, mergear ou editar `docs/execucao/` |
-| `executor` | `EXECUCAO-STATUS.md`, worktrees e operação de merge | escrever veredito, plano ou código de produto |
+| `planner` | Um plano tático em `docs/superpowers/plans/` (≤ 400 linhas, sem código literal) e o PR rascunho da fatia | implementar, auditar ou mudar estado |
+| `monitor` | Comentário de veredito no PR da fatia (`gh pr comment`) | implementar, corrigir plano, mudar status ou auditar o próprio trabalho |
+| `worker` | Código/testes no worktree da fatia; corpo e comentários de relatório do PR | decidir regra, auditar, mergear ou editar `docs/execucao/` |
+| `executor` | Worktrees, operação de merge e `EXECUCAO-STATUS.md` (uma vez por merge) | escrever veredito, plano ou código de produto |
 
 Regras:
 
-- Use uma nova instância `monitor` para cada Portão 1, Portão 2 e revisão adversarial. Da 2ª
-  rodada em diante, a instância nova recebe o veredito anterior e audita o delta (AD-22).
-- Modelo por tarefa (AD-22): `claude-opus-5.5` para Monitores de código e Portões 2/A e para
-  Planner de alto risco; `claude-sonnet-5.5` admitido para ajuste textual de plano e coordenação.
-- O Monitor forma sua conclusão antes de ler um veredito anterior da mesma rodada.
+- Revisor independente do implementador: use uma nova instância `monitor` para cada rodada de
+  Portão 1 e de Gate único; nunca a sessão que planejou ou implementou a fatia.
+- O Monitor forma sua conclusão antes de ler um veredito anterior da mesma fatia.
+- Modelo por tarefa (AD-41 item 9): Monitor e Planner de alto risco em `claude-opus-5.5`;
+  Worker pontual e Executor em `claude-sonnet-5.5`.
 - Correção de plano volta a uma nova instância `planner`; correção de código volta ao `worker`.
-- Somente o `monitor` altera o conteúdo de `GATE-VEREDITOS.md`. O Executor pode incluí-lo
-  byte a byte em um commit de coordenação, sem editá-lo.
-- `DECISOES.md` só recebe uma decisão fornecida explicitamente pelo Quality Owner.
+- Veredito é comentário no PR: sem lock, sem linha em `GATE-VEREDITOS.md` (congelado até a
+  AD-40) e sem Executor só para commitar docs de veredito.
+- Divergência técnica de implementação vai na seção "Divergências" do corpo do PR, nunca em AD.
+  `DECISOES.md` só recebe regra de negócio fornecida explicitamente pelo Quality Owner.
 - Falha de delegação ou indisponibilidade do agente exigido é bloqueio; o coordenador não
   assume o papel.
+- **Playwright só via `npm run e2e:ci`** (banco novo por execução, `next build && next start`,
+  seed). `next dev` não é ambiente de gate; falha vista só em `next dev` não é achado.
 
-## Rito por onda
+## Rito por fatia
 
-1. Planner produz plano autossuficiente.
-2. `$gate-plano` delega o Portão 1 a um Monitor independente.
-3. `$disparar-onda` usa Executor + Worker para implementar em worktree isolado.
-4. `$gate-pr` delega o Portão 2 a novo Monitor.
-5. Em fatia de **alto risco** (dinheiro, baixa, conciliação, razão, cofre/certificado/segredo,
-   fiscal, RBAC, migração de dados), outro Monitor faz a revisão adversarial e registra Portão `A`.
-   Fatia de baixo risco e PR só de documentação não têm Portão A (AD-22).
-6. Executor só mergeia o SHA aprovado pelos portões exigidos pela classe de risco. Acréscimos
-   posteriores só em `GATE-VEREDITOS.md`/`EXECUCAO-STATUS.md` não invalidam a aprovação (AD-22).
+1. Planner produz o plano enxuto e abre o PR rascunho da fatia com ele.
+2. `$gate-plano` delega o Portão 1 a um Monitor independente: checklist fixo de 10 itens, teto
+   de 2 rodadas, veredito como comentário no PR da fatia.
+3. `$disparar-onda` usa Executor + Worker para implementar em worktree isolado; o relatório é o
+   corpo do PR.
+4. `$gate-pr` delega o **Gate único** a novo Monitor (`claude-opus-5.5`): conformidade (CI 8/8
+   no head exato, diff vs. plano, DoD→teste, RA-01..06, migrations) e ataque de domínio
+   (invariantes, vigência, segregação, concorrência, auditoria antes/depois, RBAC dos 11 perfis,
+   UI→API→DB→evento→UI). PR só de documentação/skills: CI 8/8 + diff = escopo, sem ataque.
+5. O agente que mergeia usa `gh pr merge --match-head-commit <head aprovado>` e atualiza
+   `EXECUCAO-STATUS.md` uma vez.
 
-Nenhuma etapa pula a anterior. Achado BLOQUEANTE impede aprovação; achado MENOR não impede e
-vira item obrigatório da próxima etapa. Da 2ª rodada em diante a revisão é por delta, com teto
-de 3 rodadas por portão antes de escalar ao Quality Owner (AD-22). Em dúvida sobre a
-**severidade**, classifique como BLOQUEANTE.
+Nenhuma etapa pula a anterior. **BLOQUEANTE** é fechado em seis classes: perda/corrupção de
+dado; cálculo fiscal/financeiro errado; bypass de RBAC/segregação; segredo exposto; violação de
+invariante escrito no plano; 500 em caminho de usuário. Tudo o mais é MENOR; **em dúvida, MENOR
+com justificativa**. A 2ª rodada só existe com BLOQUEANTE e audita o delta; a 3ª aprova e os
+MENORES vão para o PR de hardening do épico. Exceção ao teto só por decisão explícita do Quality
+Owner, nunca por AD delegada. Decisão de produto pendente é fail-closed: `bloqueado` /
+`requires-human`.
 
 ## Comandos de validação
 
@@ -117,6 +127,9 @@ o watchdog persiste sem teto fixo de tentativas e mantém o lease/lock até conf
 Antes de declarar trabalho concluído:
 
 - confirme o diff e que nenhum arquivo fora do escopo foi alterado;
-- rode as verificações proporcionais ao risco;
+- rode as verificações proporcionais ao risco (Playwright só via `npm run e2e:ci`);
+- registre o relatório no corpo do PR, com "Divergências" (ou "Nenhuma") e DoD→teste;
 - cite comandos, resultados, branch, PR e SHAs reais;
+- merge só com Gate único `aprovado` no head exato e `--match-head-commit`; depois atualize
+  `EXECUCAO-STATUS.md` uma vez;
 - deixe bloqueios e decisões humanas explícitos, sem contorno silencioso.

@@ -1,92 +1,90 @@
 ---
 name: gate-plano
-description: Audita o plano tático de uma onda do AlphaCarnes antes da implementação e registra o Portão 1. Use quando um plano em docs/superpowers/plans estiver pronto, quando o status estiver aguardando_portao1, ou quando alguém pedir gate, revisão ou aprovação de plano de onda.
+description: Portão 1 (rito v2, AD-41) — audita o plano tático de uma fatia do AlphaCarnes antes da implementação com um checklist fixo de 10 itens e teto de 2 rodadas, registrando o veredito como comentário no PR da fatia. Use quando um plano em docs/superpowers/plans estiver pronto, ou quando alguém pedir gate, revisão ou aprovação de plano.
 ---
 
-# Portão 1 — Gate de plano
+# Portão 1 — Gate de plano (AD-41)
 
-Delegue a auditoria inteira a uma nova instância do agente `monitor`. O coordenador não audita,
-não edita o plano e não escreve o veredito. Se não for possível criar um Monitor independente,
-retorne `bloqueado`.
+Delegue a auditoria inteira a uma nova instância `monitor` (`claude-opus-5.5`), independente de
+quem escreveu o plano. O coordenador não audita, não edita o plano e não escreve o veredito. Se
+não for possível criar um Monitor independente, retorne `bloqueado`. Critérios completos:
+`docs/governance/pipeline-execucao.md` §3.
 
-## Entrada e resolução do plano
+## Entrada e lugar único de registro
 
-1. Normalize o argumento para `onda<N>`.
-2. Leia somente a linha correspondente em `docs/execucao/EXECUCAO-STATUS.md`.
-3. Resolva o plano pelo link da coluna `Plano tático`. Não escolha por data ou por “arquivo mais
-   recente”. Link ausente, `just-in-time` ou mais de um plano autoritativo significa `bloqueado`.
-4. Calcule SHA-256 do plano e use esse hash em toda evidência desta rodada.
-5. Leia as réguas: constituição, roadmap, plano mestre, matriz de rastreabilidade,
-   `DECISOES.md` e estado das dependências.
+1. Normalize o argumento para a fatia (ex. `e09-t03`).
+2. Localize o PR da fatia (`gh pr list --head <branch do plano>`). Ele é o **lugar único** de todo
+   veredito da fatia. Se o plano ainda não tem PR, o Planner abre o PR rascunho
+   (`gh pr create --draft --base develop`) com o commit do plano antes do gate; sem PR da fatia,
+   retorne `bloqueado`.
+3. Fixe o plano no head do PR: `git rev-parse <head>:<plano>` (OID do blob) e sha256 de
+   `git show <head>:<plano>`. Nunca o arquivo em disco.
+4. Leia as réguas necessárias: constituição, `DECISOES.md`, plano mestre/épico, fontes de UI.
 
 Arquivo ou régua ausente bloqueia o gate; não use conhecimento presumido.
 
-## Auditoria do Monitor
+## Checklist fixo (10 itens)
 
-Leia o plano inteiro e verifique:
+1. **Fontes citadas por tela** — cada tela aponta para o `.tsx` exato do protótipo (ou interface
+   da expansão, AD-18) e o arquivo existe.
+2. **Invariantes explícitos** — numerados e verificáveis.
+3. **Contratos** — schema, endpoints (permissão e erros) e eventos, consistentes com o plano
+   mestre e fatias vizinhas.
+4. **DoD → teste 1:1.**
+5. **Lista de arquivos com ownership.**
+6. **Critérios de parada** do Worker.
+7. **Rollback** de migration e feature.
+8. **Classe de risco declarada** (`alto`/`baixo`) e compatível com o escopo.
+9. **Sem código literal.**
+10. **≤ 400 linhas.**
 
-1. **Constituição**
-   - Cada tela aponta para o `.tsx` exato do protótipo e o arquivo existe.
-   - Tokens e cores pertencem à paleta validada.
-   - Nada entra mínimo, parcial ou “depois”.
-   - P1–P15 abertas permanecem parâmetro + badge Provisório.
-   - Zero uso de “Marca” como rótulo, campo ou entidade nova.
-2. **Escopo**
-   - Todas as linhas da matriz destinadas à onda estão cobertas.
-   - Nenhuma entrega de onda futura entrou.
-   - Todas as dependências estão `mergeada`.
-3. **Decisões**
-   - AD-xx vigentes são respeitadas e nenhuma decisão fechada é reaberta.
-4. **Autossuficiência**
-   - Goal, Architecture, Tech Stack, decisões fixadas, estrutura e referências.
-   - Mapa DoD → teste 1:1.
-   - Tasks numeradas com paths, interfaces, código literal, comandos, saída esperada e commit.
-   - Zero `TBD`, `TODO`, “a definir”, “implementar depois” ou “similar à Task”.
-5. **Consistência**
-   - Tabelas, endpoints, eventos e tipos batem com o plano mestre e ondas aprovadas.
+Nada além do checklist é critério de reprovação.
 
-Em dúvida sobre a **severidade**, classifique como BLOQUEANTE. Registre `bloqueado` no veredito
-para decisão de produto ausente, dependência não satisfeita ou violação não negociável. Na saída
-estruturada do ciclo, decisão de produto ausente mapeia obrigatoriamente para `requires-human`;
-os demais bloqueios mapeiam para `blocked`.
+## Classificação
 
-## Severidade, rodadas e classe de risco (AD-22)
+- **BLOQUEANTE** só quando o item reprovado cai em uma das seis classes (perda/corrupção de dado;
+  cálculo fiscal/financeiro errado; bypass de RBAC/segregação; segredo exposto; violação de
+  invariante; 500 em caminho de usuário) ou torna o plano inexecutável (itens 2, 3, 4 ou 8
+  ausentes).
+- Tudo o mais é **MENOR**, item obrigatório do Worker. Em dúvida, MENOR com justificativa.
+- Decisão de produto ausente → `bloqueado`, e na saída estruturada `requires-human`; demais
+  bloqueios → `blocked`.
+- `aprovado` = zero BLOQUEANTE.
 
-- **BLOQUEANTE**: viola invariante (integridade, dinheiro, segredo, segurança, regra de fonte,
-  decisão de produto) ou torna o plano inexecutável. Impede `aprovado`.
-- **MENOR**: imprecisão resolvível sem decidir regra. **Não** impede `aprovado`; vai no feedback
-  como item obrigatório do Worker (ou do próximo plano).
-- `aprovado` = zero BLOQUEANTE. `ajustar` = ao menos um BLOQUEANTE corrigível.
-- Da 2ª rodada em diante: leia o veredito anterior **depois** de formar a conclusão sobre o
-  delta (`git diff <sha-anterior>..<sha-atual> -- <plano>`) e audite a resolução dos achados.
-  Achado novo fora do delta só conta se for BLOQUEANTE.
-- Teto de 3 rodadas por portão. Na 4ª, o coordenador escala ao Quality Owner com o histórico.
-- Pin: sha256 do blob git do plano (`git show <sha>:<plano>` em arquivo temporário +
-  `Get-FileHash`), nunca do arquivo em disco (autocrlf).
-- Confirme a classe de risco declarada no plano (`alto` ou `baixo`). Plano sem classe, ou com
-  classe incompatível com o escopo, é BLOQUEANTE.
-- Reprove como BLOQUEANTE plano que afirme estado volátil (HEAD, head de PR, contagem de
-  commits, "última linha") como fato ou que use contagens de SHAs como verificação.
+## Rodadas
+
+Teto de **2 rodadas**. A 2ª audita só o delta do plano (`git diff <head-anterior>..<head-novo> --
+<plano>`) e a resolução dos BLOQUEANTES; forme a conclusão sobre o delta antes de ler o laudo
+anterior. BLOQUEANTE na 2ª rodada → o coordenador escala ao Quality Owner. Exceção ao teto só
+por decisão explícita do QO.
 
 ## Registro
 
-Adquira o lock compartilhado:
+Poste o laudo como comentário no PR da fatia — sem lock, sem `GATE-VEREDITOS.md`, sem commit:
 
 ```powershell
-pwsh -NoProfile -File .codex/scripts/lock.ps1 acquire coordination -Role monitor -RunId <run-id>
+gh pr comment <n> --body-file <laudo.md>
 ```
 
-Anexe exatamente uma linha a `GATE-VEREDITOS.md`, preserve o histórico e libere o lock em
-`finally`:
-
-```text
-| <timestamp UTC> | onda<N> | 1 | aprovado|ajustar|bloqueado | plano=<path>; sha256(blob)=<hash>; risco=alto|baixo; modelo solicitado=<id>; efetivo=<id ou nao atestavel>; comandos=<resumo> | <BLOQUEANTES numerados; MENORES numerados como itens obrigatórios> |
+```markdown
+## Portão 1 — <fatia> — rodada <r>
+- head: <sha completo>
+- plano: <path>
+- plano-blob: <OID do blob> (sha256 <hash>)
+- risco: alto | baixo
+- rodada: <r> de 2
+- veredito: aprovado | ajustar | bloqueado
+- modelo: solicitado <id>; efetivo <id ou "não atestável">
+### Checklist
+1. [ok|falha] Fontes citadas por tela — <nota>
+...
+10. [ok|falha] ≤ 400 linhas — <contagem>
+### Achados
+1. [BLOQUEANTE] <achado> — <evidência>
+2. [MENOR] <achado> — <justificativa>
 ```
-
-Escape `|` e quebras de linha dentro das células. `aprovado` com MENORES listados é válido
-(AD-22); `aprovado` com BLOQUEANTE pendente nunca é.
 
 ## Saída
 
-Retorne `onda`, `plano`, `sha256`, `veredito`, evidências curtas, feedback numerado e a linha
-anexada. Se aprovado, informe que o Executor pode marcar `plano_aprovado`.
+Retorne fatia, PR, plano, OID do blob, rodada, veredito, achados e a URL do comentário. Se
+aprovado, informe que a implementação pode ser disparada com `$disparar-onda`.
