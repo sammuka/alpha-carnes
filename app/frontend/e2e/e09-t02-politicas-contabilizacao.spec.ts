@@ -387,7 +387,7 @@ test('a 760px o seletor "Ordenar por" substitui o cabeçalho e recarrega a lista
   await admin.close();
 });
 
-test('duplo clique em Configurar mappings e em Editar versão grava uma vez; em voo Voltar e Escape não fecham o drawer', async ({ browser, baseURL, playwright }) => {
+test('duplo clique em Configurar mappings e em Editar versão grava uma vez; em voo Voltar, Cancelar e Escape não fecham', async ({ browser, baseURL, playwright }) => {
   const api = await playwright.request.newContext();
   let propria: PlanoDaJornada;
   try {
@@ -412,7 +412,8 @@ test('duplo clique em Configurar mappings e em Editar versão grava uma vez; em 
     };
     await page.route('**/api/contabilidade/politicas', adiar);
     await page.route('**/api/contabilidade/politicas/*/editar', adiar);
-        const historico = async () => {
+    await page.route('**/api/contabilidade/politicas/*/simular', adiar);
+    const historico = async () => {
       const resposta = await page.request.get(`/api/contabilidade/politicas/${codigo}/historico`);
       expect(resposta.ok(), `GET historico: ${resposta.status()}`).toBeTruthy();
       return (await resposta.json() as unknown[]).length;
@@ -456,6 +457,18 @@ test('duplo clique em Configurar mappings e em Editar versão grava uma vez; em 
     await expect(dadosPrincipais).toBeHidden({ timeout: 15_000 });
     expect(posts.filter((caminho) => caminho === `/api/contabilidade/politicas/${codigo}/editar`)).toHaveLength(1);
     expect(await historico()).toBe(auditoriasAntes + 1);
+
+    await page.getByRole('button', { name: 'Simular evento' }).click();
+    await page.getByLabel('Valor', { exact: true }).fill('10,10');
+    await page.getByLabel('Justificativa / observação', { exact: true }).fill('simula o evento');
+    const confirmar = page.getByRole('button', { name: 'Confirmar', exact: true });
+    await confirmar.click({ clickCount: 3 });
+    await expect(confirmar).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Cancelar', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('Valor', { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15_000 });
+    expect(posts.filter((caminho) => caminho === `/api/contabilidade/politicas/${codigo}/simular`)).toHaveLength(1);
   } finally {
     await admin.close();
   }

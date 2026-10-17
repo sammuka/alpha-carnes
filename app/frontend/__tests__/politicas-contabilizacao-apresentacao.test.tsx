@@ -158,7 +158,7 @@ async function abrirAprovar(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Confirmar' }));
 }
 
-it('a resposta da simulação não fecha o modal de aprovação aberto depois', async () => {
+it('com a simulação em voo o modal não fecha; a aprovação só abre depois da resposta e começa limpa', async () => {
   const user = userEvent.setup();
   const simulacao = adiavel();
   global.fetch = jest.fn().mockReturnValueOnce(simulacao.promessa) as unknown as typeof fetch;
@@ -167,14 +167,15 @@ it('a resposta da simulação não fecha o modal de aprovação aberto depois', 
   await user.type(screen.getByLabelText('Valor'), '10,10');
   await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
   await user.click(screen.getByRole('button', { name: 'Confirmar' }));
-  // O modal do DS bloqueia o fundo: a pessoa fecha a simulação em voo e abre a aprovação.
+  // Portão 2 r5 (alinhado à T01): com envio em voo, Escape não fecha o modal da simulação.
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
-  expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Valor')).toBeInTheDocument();
   await act(async () => {
     simulacao.resolver(corpoOk({ ...linha('LIQUIDACAO-2026-10', 'Liquidação'), simulacaoValor: '10.10', simulacaoDebito: '10.10', simulacaoCredito: '10.10' }));
   });
-  expect(screen.getByLabelText('Justificativa / observação')).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  expect(screen.getByLabelText('Justificativa / observação')).toHaveValue('');
   expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
 });
 
@@ -795,5 +796,24 @@ describe('Portão 2 r5: guarda de envio em voo no drawer e no modal', () => {
     await act(async () => { post.resolver(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))); });
     await waitFor(() => expect(screen.queryByLabelText('Justificativa auditável')).not.toBeInTheDocument());
     expect(posts).toHaveLength(1);
+  });
+
+  it('modal Ação do domínio: em voo, Cancelar fica desabilitado e Escape não fecha; duplo clique em Confirmar = 1 POST', async () => {
+    const user = userEvent.setup();
+    const { post, posts } = mockPostAdiado();
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+    await user.type(screen.getByLabelText('Valor'), '10,10');
+    await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+    const confirmar = screen.getByRole('button', { name: 'Confirmar' });
+    fireEvent.click(confirmar);
+    fireEvent.click(confirmar);
+    expect(posts).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByLabelText('Valor')).toBeInTheDocument();
+    await act(async () => { post.resolver(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))); });
+    await waitFor(() => expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument());
   });
 });

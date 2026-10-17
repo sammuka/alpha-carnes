@@ -871,7 +871,7 @@ export function PoliticasContabilizacaoClient({
         </SheetContent>
       </Sheet>
 
-      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) setModal(null); }}>
+      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto && !emVoo.current) setModal(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Ação do domínio: {modal === 'simular' ? 'Simular evento' : 'Aprovar regra'}</DialogTitle>
@@ -892,7 +892,7 @@ export function PoliticasContabilizacaoClient({
             {avisoNaTela}
           </div>
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
+            <Button type="button" variant="ghost" disabled={enviando} onClick={() => setModal(null)}>Cancelar</Button>
             <Button type="button" disabled={enviando} aria-busy={enviando || undefined} onClick={() => modal && void confirmarLoteOuAcao(modal)}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
