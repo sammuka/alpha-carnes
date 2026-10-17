@@ -143,7 +143,8 @@ test('administrador configura, simula e outra pessoa aprova', async ({ browser, 
   expect(confirmada?.situacao).toBe('APPROVED');
   expect(confirmada?.aprovadorNome).toBe('Contador provisório');
   await paginaOutra.reload();
-  await paginaOutra.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
+  // A busca volta do sessionStorage; digitar de novo antes da hidratação corre contra a restauração.
+  await expect(paginaOutra.getByLabel('Buscar registros da lista')).toHaveValue(plano.debitoNome);
   await expect(paginaOutra.getByRole('cell', { name: 'Liquidação', exact: true })).toHaveCount(1);
   await expect(paginaOutra.getByRole('cell', { name: 'Aprovado', exact: true })).toBeVisible();
   await admin.close();
