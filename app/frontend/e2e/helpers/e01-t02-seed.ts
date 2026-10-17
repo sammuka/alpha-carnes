@@ -3,7 +3,6 @@
  * operação, produto e cliente pelas APIs já existentes. CFOP 5102 e NCM 02013000
  * nascem na jornada, pelo diálogo da tela — aqui só entram códigos de apoio.
  */
-import { execFileSync } from 'node:child_process';
 import type { APIRequestContext } from '@playwright/test';
 import {
   criarEstabelecimentoApi,
@@ -17,6 +16,7 @@ import {
   type UsuariosE01,
 } from './e01-t01-seed';
 import { BACKEND_URL } from './onda6-seed';
+import { executarSql } from './banco';
 
 export {
   entrarNoFrontend,
@@ -217,41 +217,22 @@ export async function criarEnquadramentosEmLote(
   return inicios;
 }
 
-/** Nome do banco vindo de DATABASE_URL; recusa banco sem sufixo de teste. */
-export function bancoDeTeste(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL é obrigatório para o seed SQL do E2E');
-  const nome = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
-  if (!/^[a-z0-9_]+$/.test(nome) || !/_(test|e2e|e01_t\d+)$/.test(nome)) {
-    throw new Error(`Banco "${nome}" sem sufixo de teste (_test, _e2e ou _e01_tNN): seed SQL recusado`);
-  }
-  return nome;
-}
-
 /** Libera 5102 e 02013000 para a jornada criar os códigos pelo diálogo. */
-export function liberarCodigosDaJornada(): void {
+export async function liberarCodigosDaJornada(): Promise<void> {
   const sql = `UPDATE cfops SET deleted_at = now() WHERE codigo = '5102' AND deleted_at IS NULL; UPDATE ncms SET deleted_at = now() WHERE codigo = '02013000' AND deleted_at IS NULL;`;
-  execFileSync('docker', [
-    'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
-    '-v', 'ON_ERROR_STOP=1', '-c', sql,
-  ], { stdio: 'pipe' });
+  await executarSql(sql);
 }
 
 /**
  * Segunda linha ATIVA da mesma chave, para o alerta de empate. O POST do serviço
  * recusa a sobreposição; a evidência usa o mesmo atalho do teste de consulta.
  */
-export function inserirEmpate(enquadramentoId: string): string {
+export async function inserirEmpate(enquadramentoId: string): Promise<string> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(enquadramentoId)) {
     throw new Error('Identificador inválido para o empate');
   }
   const codigo = String(Date.now());
   const sql = `INSERT INTO enquadramentos_fiscais (codigo, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, prioridade, situacao, criado_por_id, atualizado_por_id) SELECT '${codigo}', empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, 99, situacao, criado_por_id, atualizado_por_id FROM enquadramentos_fiscais WHERE id = '${enquadramentoId}'`;
-  execFileSync('docker', [
-    'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
-    '-v', 'ON_ERROR_STOP=1', '-c', sql,
-  ], { stdio: 'pipe' });
+  await executarSql(sql);
   return codigo;
 }
