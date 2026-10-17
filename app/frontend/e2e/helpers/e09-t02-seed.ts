@@ -37,9 +37,39 @@ async function postar(request: APIRequestContext, cookie: string, rota: string, 
   if (!resposta.ok()) throw new Error(`POST ${rota} -> ${resposta.status()}: ${await resposta.text()}`);
 }
 
+export interface AprovadorDaJornada { email: string; password: string; cookieHeader: string }
+
+let aprovador: Promise<AprovadorDaJornada> | null = null;
+
+/**
+ * Segundo administrador (AD-39): o autor de uma conta não a aprova. Criado uma vez por processo pela
+ * API de usuários do backend; o cabeçalho Cookie serve a qualquer APIRequestContext.
+ */
+export function aprovadorDaJornada(request: APIRequestContext): Promise<AprovadorDaJornada> {
+  aprovador ??= (async () => {
+    const { cookieHeader } = await loginBackend(request);
+    const rodada = `${Date.now().toString(36)}${randomInt(46656).toString(36)}`;
+    const email = `aprovador.e09.${rodada}@alphacarnes.local`;
+    const password = `E09-${rodada}-Senha!9`;
+    await postar(request, cookieHeader, '/usuarios', { nome: 'Aprovador do plano', email, password, perfis: ['administrador'] });
+    const login = await request.post(`${BACKEND_URL}/auth/login`, {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!login.ok()) throw new Error(`login do aprovador -> ${login.status()}`);
+    const cookie = login.headersArray()
+      .filter((header) => header.name.toLowerCase() === 'set-cookie')
+      .map((header) => header.value.split(';')[0])
+      .join('; ');
+    return { email, password, cookieHeader: cookie };
+  })();
+  return aprovador;
+}
+
 /** `debitoComoFormula` dá à conta de débito um nome que começa em "=", para provar a neutralização no CSV. */
 export async function criarPlanoDaJornada(request: APIRequestContext, debitoComoFormula = false): Promise<PlanoDaJornada> {
   const { cookieHeader } = await loginBackend(request);
+  const { cookieHeader: cookieAprovador } = await aprovadorDaJornada(request);
   const sufixo = `${Date.now().toString(36)}${randomInt(46656).toString(36)}`;
   const vigenciaInicio = ontemIso();
   const centroCodigo = `CT${sufixo}`;
@@ -68,7 +98,8 @@ export async function criarPlanoDaJornada(request: APIRequestContext, debitoComo
     await postar(request, cookieHeader, `/contabilidade/plano/${conta.codigo}/revisar-competencia`, {
       numero: 1, vigenciaInicio, vigenciaFim: null, justificativa: 'revisa a competência',
     });
-    await postar(request, cookieHeader, `/contabilidade/plano/${conta.codigo}/aprovar`, {
+    // Autor e aprovador são pessoas diferentes (AD-39).
+    await postar(request, cookieAprovador, `/contabilidade/plano/${conta.codigo}/aprovar`, {
       numero: 1, justificativa: 'aprova a conta da jornada',
     });
   }

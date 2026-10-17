@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { limparPlano } from './limpar-plano';
-import { criarPlanoDaJornada } from './helpers/e09-t02-seed';
+import { aprovadorDaJornada, criarPlanoDaJornada } from './helpers/e09-t02-seed';
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@CiTest123456';
@@ -102,6 +102,8 @@ async function criarConta(
     await expect(lookup).toBeHidden();
     await expect(page.getByPlaceholder('Selecione conta contábil').locator('option:checked')).toHaveText('Grupo do ativo');
   }
+  // A tela pode ter sido recarregada depois da aprovação pela outra pessoa: Pesquisar carrega os centros.
+  await page.getByRole('button', { name: 'Pesquisar centro de custo', exact: true }).click();
   await page.getByLabel('Centro de custo', { exact: true }).last().selectOption({ label: 'Operação industrial' });
   await preencherInicioVigencia(page, '2026-10-01');
   await page.getByLabel('Motivo da alteração', { exact: true }).last().fill('abre a conta');
@@ -115,13 +117,31 @@ async function confirmarEContar(page: Page, linhas: number) {
   await expect(page.locator('.plano-grade tbody tr')).toHaveCount(linhas);
 }
 
-async function revisarEAprovar(page: Page, linhas: number) {
+/** Segundo administrador (AD-39): quem criou a conta revisa, outra pessoa aprova. */
+let aprovadorContext: BrowserContext;
+
+async function revisarEAprovar(page: Page, linhas: number, nome: string, provarSegregacao = false) {
   await page.getByRole('button', { name: 'Revisar competência', exact: true }).click();
   await page.getByLabel('Justificativa / observação', { exact: true }).last().fill('revisa a competência');
   await confirmarEContar(page, linhas);
-  await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
-  await page.getByLabel('Justificativa / observação', { exact: true }).last().fill('aprova a conta');
-  await confirmarEContar(page, linhas);
+  if (provarSegregacao) {
+    await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
+    await page.getByLabel('Justificativa / observação', { exact: true }).last().fill('autor tenta aprovar');
+    await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
+    await expect(page.getByText('A aprovação deve ser feita por usuário diferente do autor da conta.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
+  const outra = await aprovadorContext.newPage();
+  await outra.goto('/erp/contabilidade/plano-de-contas');
+  await outra.getByRole('cell', { name: nome, exact: true }).click();
+  await outra.getByRole('button', { name: 'Aprovar', exact: true }).click();
+  await outra.getByLabel('Justificativa / observação', { exact: true }).last().fill('outra pessoa aprova a conta');
+  await confirmarEContar(outra, linhas);
+  await outra.close();
+  await page.reload();
+  await page.getByRole('cell', { name: nome, exact: true }).click();
+  await expect(page.locator('.plano-grade tbody tr')).toHaveCount(linhas);
   await expect(page.locator('.plano-grade').getByText('Aprovado', { exact: true }).first()).toBeVisible();
 }
 
@@ -131,7 +151,7 @@ test.describe('Plano de contas', () => {
   let adminContext: BrowserContext;
   let comercialContext: BrowserContext;
 
-  test.beforeAll(async ({ browser, baseURL }) => {
+  test.beforeAll(async ({ browser, baseURL, playwright }) => {
     adminContext = await browser.newContext({ baseURL });
     await cookiesDoLogin(adminContext, baseURL!, ADMIN_EMAIL, ADMIN_PASSWORD);
     const criado = await adminContext.request.post('/api/admin/usuarios', {
@@ -145,9 +165,18 @@ test.describe('Plano de contas', () => {
     expect(criado.ok() || criado.status() === 409, `criar comercial: ${criado.status()}`).toBeTruthy();
     comercialContext = await browser.newContext({ baseURL });
     await cookiesDoLogin(comercialContext, baseURL!, COMERCIAL_EMAIL, COMERCIAL_SENHA);
+    const api = await playwright.request.newContext();
+    try {
+      const segundo = await aprovadorDaJornada(api);
+      aprovadorContext = await browser.newContext({ baseURL });
+      await cookiesDoLogin(aprovadorContext, baseURL!, segundo.email, segundo.password);
+    } finally {
+      await api.dispose();
+    }
   });
 
   test.afterAll(async () => {
+    await aprovadorContext?.close();
     await comercialContext?.close();
     await adminContext?.close();
   });
@@ -193,10 +222,10 @@ test.describe('Plano de contas', () => {
     await expect(page.getByText('Provisório', { exact: true }).first()).toBeVisible();
     await criarCentro(page);
     await criarConta(page, { codigo: '1', nome: 'Grupo do ativo', classificacao: 'sintética', pai: null });
-    await revisarEAprovar(page, 1);
+    await revisarEAprovar(page, 1, 'Grupo do ativo', true);
     await page.getByRole('cell', { name: 'Grupo do ativo', exact: true }).click();
     await criarConta(page, { codigo: '1.1.01', nome: 'Caixa e bancos', classificacao: 'analítica', pai: '1' });
-    await revisarEAprovar(page, 2);
+    await revisarEAprovar(page, 2, 'Caixa e bancos');
     await expect(page.getByRole('cell', { name: 'Caixa e bancos', exact: true })).toBeVisible();
     await expect(page.getByText(/[0-9a-f]{8}-[0-9a-f]{4}-7/i)).toHaveCount(0);
     await page.getByRole('button', { name: 'Bloquear conta e mapear lançamentos', exact: true }).click();
@@ -213,6 +242,52 @@ test.describe('Plano de contas', () => {
     await page.getByRole('tab', { name: 'Exceções', exact: true }).click();
     await expect(page.getByText('Bloqueio / exceção: Conta desativada.')).toBeVisible();
     await expect(page.getByText('Bloqueio / exceção: Mudança de classificação após fechamento.')).toBeVisible();
+    await page.close();
+  });
+
+  test('triplo clique em Criar e em Confirmar envia um único POST e bloqueia Cancelar e Escape em voo', async () => {
+    const page = await adminContext.newPage();
+    await abrirPlano(page);
+    await criarCentro(page);
+    const posts: string[] = [];
+    page.on('request', (pedido) => {
+      if (pedido.method() === 'POST') posts.push(new URL(pedido.url()).pathname);
+    });
+    // Resposta adiada: o envio fica em voo enquanto os cliques extras chegam.
+    const adiar = async (rota: import('@playwright/test').Route) => {
+      if (rota.request().method() === 'POST') await new Promise((pronto) => setTimeout(pronto, 1500));
+      await rota.continue();
+    };
+    await page.route('**/api/contabilidade/plano', adiar);
+    await page.route('**/api/contabilidade/plano/*/revisar-competencia', adiar);
+
+    await page.getByLabel('Código', { exact: true }).last().fill('1');
+    await page.getByPlaceholder('Informe conta contábil').fill('Grupo do ativo');
+    await page.getByLabel('Grupo', { exact: true }).fill('Circulante');
+    await page.getByLabel('Centro de custo', { exact: true }).last().selectOption({ label: 'Operação industrial' });
+    await preencherInicioVigencia(page, '2026-10-01');
+    await page.getByLabel('Motivo da alteração', { exact: true }).last().fill('abre a conta');
+    const criar = formulario(page).getByRole('button', { name: 'Criar', exact: true });
+    await criar.click({ clickCount: 3 });
+    await expect(criar).toBeDisabled();
+    await expect(formulario(page).getByRole('button', { name: 'Voltar', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(formulario(page)).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Grupo do ativo', exact: true })).toBeVisible({ timeout: 15_000 });
+    expect(posts.filter((caminho) => caminho === '/api/contabilidade/plano')).toHaveLength(1);
+
+    await page.getByRole('button', { name: 'Revisar competência', exact: true }).click();
+    await page.getByLabel('Justificativa / observação', { exact: true }).fill('revisa a competência');
+    const confirmar = page.getByRole('button', { name: 'Confirmar', exact: true });
+    await confirmar.click({ clickCount: 3 });
+    await expect(confirmar).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Cancelar', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('Justificativa / observação', { exact: true })).toBeVisible();
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15_000 });
+    await expect(page.locator('.plano-grade').getByText('Aguardando revisão', { exact: true })).toBeVisible();
+    await expect(page.getByText('Situação não permite esta transição', { exact: true })).toHaveCount(0);
+    expect(posts.filter((caminho) => caminho.endsWith('/revisar-competencia'))).toHaveLength(1);
     await page.close();
   });
 
@@ -317,7 +392,7 @@ test.describe('Plano de contas', () => {
     await abrirPlano(page);
     await criarCentro(page);
     await criarConta(page, { codigo: '1', nome: 'Grupo do ativo', classificacao: 'sintética', pai: null });
-    await revisarEAprovar(page, 1);
+    await revisarEAprovar(page, 1, 'Grupo do ativo');
     await page.getByRole('button', { name: 'Ações do processo', exact: true }).click();
     await page.getByRole('button', { name: 'Abrir decisão →', exact: true }).click();
     await page.getByLabel('Justificativa / observação', { exact: true }).fill('tenta mapear a sintética');
