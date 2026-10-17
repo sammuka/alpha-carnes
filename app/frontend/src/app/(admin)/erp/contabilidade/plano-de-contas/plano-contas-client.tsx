@@ -186,9 +186,9 @@ function corpoConta(form: Formulario) {
   };
 }
 
-export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: ContaGrade[]; semAcesso?: boolean }) {
+export function PlanoContasClient({ inicial, totalInicial = inicial.length, semAcesso = false }: { inicial: ContaGrade[]; totalInicial?: number; semAcesso?: boolean }) {
   const [contas, setContas] = useState(inicial);
-  const [total, setTotal] = useState(inicial.length);
+  const [total, setTotal] = useState(totalInicial);
   const [codigoSelecionado, setCodigoSelecionado] = useState(inicial[0]?.codigo ?? '');
   const [aba, setAba] = useState<Aba>('Ficha e campos');
   const [processo, setProcesso] = useState(false);

@@ -8,6 +8,7 @@ export default async function PlanoDeContasPage() {
   const resposta = await GET(new NextRequest('http://interno/api/contabilidade/plano?pagina=1'));
   if (resposta.status === 403) return <PlanoContasClient inicial={[]} semAcesso />;
   if (!resposta.ok) return <PlanoContasClient inicial={[]} />;
-  const corpo = await resposta.json() as { itens?: ContaGrade[] };
-  return <PlanoContasClient inicial={corpo.itens ?? []} />;
+  const corpo = await resposta.json() as { itens?: ContaGrade[]; total?: number };
+  const itens = corpo.itens ?? [];
+  return <PlanoContasClient inicial={itens} totalInicial={corpo.total ?? itens.length} />;
 }
