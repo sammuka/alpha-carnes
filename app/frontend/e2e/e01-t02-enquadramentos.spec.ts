@@ -182,7 +182,7 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
   });
 
   test('jornada: cadastro, duplicação, sobreposição e consulta sem alíquota', async ({ browser, request, baseURL }) => {
-    liberarCodigosDaJornada();
+    await liberarCodigosDaJornada();
     const usuarios = await prepararUsuarios(request);
     const cookieA = await loginApi(request, usuarios.adminA);
     const cookieB = await loginApi(request, usuarios.adminB);

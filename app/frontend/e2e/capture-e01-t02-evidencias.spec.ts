@@ -194,7 +194,7 @@ test.describe('E01-T02 evidências app × protótipo', () => {
     await duplicar.getByRole('button', { name: 'Cancelar' }).click();
     await expect(duplicar).toBeHidden();
 
-    inserirEmpate(principal.enquadramentoId);
+    await inserirEmpate(principal.enquadramentoId);
     await abrirAba(page, 'Exceções', 'Empate de enquadramento');
     await page.getByRole('button', { name: 'Validar', exact: true }).click();
     await capturar(page, 'app-alerta-empate.png', page.getByText(EMPATE));

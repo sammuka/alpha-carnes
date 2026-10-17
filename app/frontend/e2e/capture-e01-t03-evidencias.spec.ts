@@ -3,7 +3,6 @@
  * gera os PNG de docs/evidencias/e01-t03, com um elemento-chave visível antes
  * de cada screenshot. A lista abaixo é a conta: 9 pares e 8 estados só da aplicação.
  */
-import { execFileSync } from 'node:child_process';
 import { request as playwrightRequest, test, expect, type APIRequestContext, type Browser, type Locator, type Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -17,7 +16,7 @@ import {
   type UsuarioE2e,
   type UsuariosE01,
 } from './helpers/e01-t03-seed';
-import { bancoDeTeste } from './helpers/e01-t02-seed';
+import { executarSql } from './helpers/banco';
 import { escolherCombo, valorCampo } from './helpers/fiscal-ui';
 import { BACKEND_URL } from './helpers/onda6-seed';
 
@@ -255,16 +254,11 @@ async function selecionarTexto(page: Page, rotulo: string, confere: () => Promis
   throw new Error(`não achei a versão esperada na operação ${rotulo}`);
 }
 
-function removerBeneficio(id: string): void {
+async function removerBeneficio(id: string): Promise<void> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     throw new Error('Identificador inválido para o benefício');
   }
-  execFileSync('docker', [
-    'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
-    '-v', 'ON_ERROR_STOP=1', '-c',
-    `UPDATE beneficios_fiscais SET deleted_at = now() WHERE id = '${id}' AND deleted_at IS NULL`,
-  ], { stdio: 'pipe' });
+  await executarSql(`UPDATE beneficios_fiscais SET deleted_at = now() WHERE id = '${id}' AND deleted_at IS NULL`);
 }
 
 test.describe('E01-T03 evidências app × protótipo', () => {
@@ -398,7 +392,7 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     await page.getByRole('button', { name: 'Editar versão' }).click();
     const edicao = page.getByRole('dialog', { name: 'Editar versão' });
     await edicao.getByLabel('Justificativa auditável').fill('Evidência de benefício inativo.');
-    removerBeneficio(beneficioId);
+    await removerBeneficio(beneficioId);
     await edicao.getByRole('button', { name: 'Salvar rascunho' }).click();
     await capturar(page, 'app-beneficio-nao-elegivel.png', edicao.getByText(BENEFICIO));
     await edicao.getByRole('button', { name: 'Cancelar' }).click();
