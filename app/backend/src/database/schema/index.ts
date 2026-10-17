@@ -36,3 +36,5 @@ export * from './fiscal-enquadramentos.schema';
 export * from './fiscal-regras.schema';
 export * from './fiscal-simulacoes.schema';
 export * from './fiscal-homologacoes.schema';
+export * from './contabilidade-plano.schema';
+export * from './contabilidade-politicas.schema';

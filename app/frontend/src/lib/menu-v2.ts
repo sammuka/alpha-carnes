@@ -118,6 +118,21 @@ export const MENU_V2: MenuGroupDef[] = [
     ],
   },
   {
+    title: 'CONTABILIDADE',
+    items: [
+      {
+        href: '/erp/contabilidade/plano-de-contas',
+        label: 'Plano de contas e centros de custo',
+        iconKey: 'FileText',
+      },
+      {
+        href: '/erp/contabilidade/politicas-de-contabilizacao',
+        label: 'Políticas de contabilização',
+        iconKey: 'FileText',
+      },
+    ],
+  },
+  {
     title: 'CADASTROS & REGRAS',
     items: [
       { href: '/cadastros/representantes', label: 'Representantes', iconKey: 'UserCircle' },

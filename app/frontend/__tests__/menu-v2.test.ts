@@ -12,6 +12,7 @@ const GRUPOS = [
   'CARGA',
   'FATURAMENTO',
   'FISCAL',
+  'CONTABILIDADE',
   'CADASTROS & REGRAS',
   'ADMINISTRAÇÃO',
 ];
@@ -59,29 +60,39 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
   ['ADMINISTRAÇÃO', 'Auditoria', '/admin/auditoria'],
 ];
 
-/** Itens do ERP integrado (AD-24 (1)): grupo FISCAL criado na 8ª posição, fora do protótipo v1.1. */
+/** Itens do ERP integrado (AD-24 (1)): grupos FISCAL (8ª posição) e CONTABILIDADE (9ª), fora do protótipo v1.1. */
 const ITENS_ERP: [string, string, string][] = [
   ['FISCAL', 'Empresas, estabelecimentos e regime', '/fiscal/empresas'],
   ['FISCAL', 'Operações fiscais e enquadramentos', '/fiscal/enquadramentos'],
   ['FISCAL', 'Editor de regras tributárias', '/fiscal/regras'],
   ['FISCAL', 'Simulador fiscal e memória de cálculo', '/fiscal/simulador'],
   ['FISCAL', 'Painel de alterações e homologação de regras', '/fiscal/homologacao'],
+  ['CONTABILIDADE', 'Plano de contas e centros de custo', '/erp/contabilidade/plano-de-contas'],
+  ['CONTABILIDADE', 'Políticas de contabilização', '/erp/contabilidade/politicas-de-contabilizacao'],
 ];
 
 describe('menu canônico v2', () => {
-  it('MENU_V2 tem os 10 grupos, com FISCAL na 8ª posição', () => {
+  it('MENU_V2 tem os 11 grupos, com FISCAL na 8ª e CONTABILIDADE na 9ª posição', () => {
     expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
     expect(MENU_V2[7]?.title).toBe('FISCAL');
-    expect(MENU_V2).toHaveLength(10);
+    expect(MENU_V2[8]?.title).toBe('CONTABILIDADE');
+    expect(MENU_V2).toHaveLength(11);
   });
 
-  it('MENU_V2 mantém os 39 itens com rotulo e rota do prototipo (AD-15) e soma o item do ERP', () => {
+  it('MENU_V2 mantém os 39 itens com rotulo e rota do prototipo (AD-15) e soma os itens do ERP', () => {
     const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
-    const semFiscal = atual.filter(([grupo]) => grupo !== 'FISCAL');
+    const semFiscal = atual.filter(([grupo]) => grupo !== 'FISCAL' && grupo !== 'CONTABILIDADE');
     expect(semFiscal).toEqual(ITENS_PROTOTIPO);
     expect(semFiscal).toHaveLength(39);
-    expect(atual.filter(([grupo]) => grupo === 'FISCAL')).toEqual(ITENS_ERP);
-    expect(atual).toHaveLength(44);
+    expect(atual.filter(([grupo]) => grupo === 'FISCAL')).toEqual(ITENS_ERP.slice(0, 5));
+    expect(atual.filter(([grupo]) => grupo === 'FISCAL' || grupo === 'CONTABILIDADE')).toEqual(ITENS_ERP);
+    expect(atual).toHaveLength(46);
+    expect(atual).toContainEqual([
+      'CONTABILIDADE',
+      'Políticas de contabilização',
+      '/erp/contabilidade/politicas-de-contabilizacao',
+    ]);
+    expect(atual.some(([, , href]) => /e\d{2}-t\d{2}/i.test(String(href)))).toBe(false);
   });
 
   it('o item FISCAL declara a permissão FISCAL_EMPRESAS_LER e o ícone Landmark', () => {

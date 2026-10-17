@@ -4,7 +4,7 @@
  * aparecer num popover, só é escolhido por gridcell com nome exato.
  */
 import * as fs from 'node:fs';
-import { test, expect, type Browser, type Locator, type Page, type Response } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Locator, type Page, type Response } from '@playwright/test';
 import {
   criarCenario,
   criarSimulacaoApoio,
@@ -33,8 +33,16 @@ function escapar(texto: string): RegExp {
   return new RegExp(texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 }
 
+// O `browser` vive o worker inteiro: contexto não fechado segue aberto nos specs seguintes da mesma execução,
+// com tempo real e recargas do next dev disputando o servidor (Portão 2 r5, bateria combinada).
+const contextosAbertos: BrowserContext[] = [];
+test.afterEach(async () => {
+  await Promise.all(contextosAbertos.splice(0).map((contexto) => contexto.close()));
+});
+
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL });
+  contextosAbertos.push(context);
   await context.addInitScript(() => sessionStorage.removeItem('fiscal.simulador.lista'));
   await entrarNoFrontend(context, baseURL, usuario);
   return context.newPage();

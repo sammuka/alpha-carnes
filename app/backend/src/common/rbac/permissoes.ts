@@ -111,6 +111,10 @@ export const PERMISSOES = {
   FISCAL_HOMOLOGACOES_LER: 'FISCAL_HOMOLOGACOES_LER',
   FISCAL_HOMOLOGACOES_GERENCIAR: 'FISCAL_HOMOLOGACOES_GERENCIAR',
   FISCAL_HOMOLOGACOES_APROVAR: 'FISCAL_HOMOLOGACOES_APROVAR',
+  CONTABILIDADE_PLANO_LER: 'CONTABILIDADE_PLANO_LER',
+  CONTABILIDADE_PLANO_GERENCIAR: 'CONTABILIDADE_PLANO_GERENCIAR',
+  CONTABILIDADE_POLITICA_LER: 'CONTABILIDADE_POLITICA_LER',
+  CONTABILIDADE_POLITICA_GERENCIAR: 'CONTABILIDADE_POLITICA_GERENCIAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -416,6 +420,8 @@ pushPermissoes('gestor', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('administrador', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('logistica', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR'); // D10.9 — doc 04 §7.3/§7.4
 pushPermissoes('diretoria', 'FATURAMENTO_LER');
+pushPermissoes('administrador', 'CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR');
+pushPermissoes('administrador', 'CONTABILIDADE_POLITICA_LER', 'CONTABILIDADE_POLITICA_GERENCIAR');
 
 // E01-T01 — cadastro fiscal de empresas/estabelecimentos/regime: só administrador (AD-04; AD-18 (5)
 // personas não viram perfis). Demais perfis dependem da decisão H-E01-02 (parâmetro
@@ -528,4 +534,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   FISCAL_HOMOLOGACOES_LER: 'Consultar o painel de alterações e homologação de regras',
   FISCAL_HOMOLOGACOES_GERENCIAR: 'Abrir revisão de regra aprovada e vincular cenário de regressão',
   FISCAL_HOMOLOGACOES_APROVAR: 'Aprovar, rejeitar e publicar homologação de regra submetida por outro usuário',
+  CONTABILIDADE_PLANO_LER: 'Consultar plano de contas e centros de custo',
+  CONTABILIDADE_PLANO_GERENCIAR: 'Criar, versionar, revisar, aprovar, bloquear e mapear o plano de contas',
+  CONTABILIDADE_POLITICA_LER: 'Consultar políticas de contabilização',
+  CONTABILIDADE_POLITICA_GERENCIAR: 'Configurar mappings, simular evento e aprovar regra',
 };

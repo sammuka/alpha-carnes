@@ -10,6 +10,7 @@ import type { IncomingMessage, Server } from 'http';
 import type { Duplex } from 'stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TokenService, type AccessTokenPayload } from '../modules/auth/token.service';
+import { PERMISSOES } from '../common/rbac/permissoes';
 import { RealtimeHub } from './realtime.hub';
 import { permissaoParaRoom, ROOMS_PROTEGIDAS } from './room-permissoes';
 import {
@@ -78,6 +79,9 @@ interface MensagemCliente {
  * cookie access_token. Escuta eventos de domínio e faz broadcast por room.
  * Sem polling. Todo handler é defensivo — broadcast nunca derruba o request HTTP.
  */
+type PlanoContaPayload = { codigo: string; acao: string; situacao: string };
+type PoliticaPayload = { codigo: string; acao: string; situacao: string };
+
 @Injectable()
 export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(RealtimeGateway.name);
@@ -154,6 +158,12 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
 
   /** A room protegida exige a permissão do mapa; as demais continuam com disponibilidade. */
   private podeAssinar(ws: AuthSocket, room: string): boolean {
+    if (room === 'contabilidade-plano') {
+      return ws.user?.permissoes?.includes(PERMISSOES.CONTABILIDADE_PLANO_LER) ?? false;
+    }
+    if (room === 'contabilidade-politicas') {
+      return ws.user?.permissoes?.includes(PERMISSOES.CONTABILIDADE_POLITICA_LER) ?? false;
+    }
     return ws.user?.permissoes?.includes(permissaoParaRoom(room)) ?? false;
   }
 
@@ -500,6 +510,61 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.AJUSTE_ESTOQUE_DECIDIDO)
   handleAjusteEstoqueDecidido(payload: AjusteEstoqueDecididoPayload): void {
     this.broadcast(EVENTOS.AJUSTE_ESTOQUE_DECIDIDO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_CRIADA)
+  handlePlanoContaCriada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_CRIADA, payload);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_VERSIONADA)
+  handlePlanoContaVersionada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_VERSIONADA, payload);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_REVISADA)
+  handlePlanoContaRevisada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_REVISADA, payload);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_APROVADA)
+  handlePlanoContaAprovada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_APROVADA, payload);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_BLOQUEADA)
+  handlePlanoContaBloqueada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_BLOQUEADA, payload);
+  }
+
+  @OnEvent(EVENTOS.PLANO_CONTA_MAPEADA)
+  handlePlanoContaMapeada(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_MAPEADA, payload);
+  }
+
+  @OnEvent(EVENTOS.CENTRO_CUSTO_CRIADO)
+  handleCentroCustoCriado(payload: PlanoContaPayload): void {
+    this.hub.broadcast('contabilidade-plano', EVENTOS.CENTRO_CUSTO_CRIADO, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_CONFIGURADA)
+  handlePoliticaConfigurada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_CONFIGURADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_EDITADA)
+  handlePoliticaEditada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_EDITADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_SIMULADA)
+  handlePoliticaSimulada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_SIMULADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_APROVADA)
+  handlePoliticaAprovada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_APROVADA, payload);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

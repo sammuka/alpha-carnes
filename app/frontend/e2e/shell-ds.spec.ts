@@ -35,6 +35,7 @@ const GRUPOS = [
   'CARGA',
   'FATURAMENTO',
   'FISCAL',
+  'CONTABILIDADE',
   'CADASTROS & REGRAS',
   'ADMINISTRAÇÃO',
 ];
@@ -84,7 +85,7 @@ test.describe('Shell + DS da Onda 2', () => {
     expect(gradiente).toContain('rgb(27, 78, 155)');
   });
 
-  test('menu do administrador tem os 10 grupos na ordem do prototipo', async ({ page, request, baseURL }) => {
+  test('menu do administrador tem os 11 grupos na ordem do prototipo', async ({ page, request, baseURL }) => {
     await loginAdmin(page, request, baseURL!);
     await page.goto('/gestao/dashboard');
     const aside = page.getByRole('complementary', { name: 'Navegação principal' });

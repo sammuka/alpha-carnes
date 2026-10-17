@@ -76,8 +76,8 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
     expect(MENUS_OPERACIONAIS).toHaveLength(39);
-    expect(MENUS_CANONICOS).toHaveLength(44);
-    expect(res.body.menus).toHaveLength(44);
+    expect(MENUS_CANONICOS).toHaveLength(46);
+    expect(res.body.menus).toHaveLength(46);
   });
 
   it('GET /perfis/catalogo devolve o módulo Fiscal com as treze permissões e suas descrições', async () => {

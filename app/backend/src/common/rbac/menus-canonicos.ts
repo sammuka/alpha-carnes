@@ -44,13 +44,15 @@ export const MENUS_OPERACIONAIS = [
   '/admin/auditoria',
 ] as const;
 
-/** Rotas do ERP integrado (AD-24 (1)): grupo FISCAL, posição 08 da ADR-ERP-024. */
+/** Rotas do ERP integrado (AD-24 (1)): grupo FISCAL (posição 08) e CONTABILIDADE (posição 11) da ADR-ERP-024. */
 export const MENUS_ERP = [
   '/fiscal/empresas',
   '/fiscal/enquadramentos',
   '/fiscal/regras',
   '/fiscal/simulador',
   '/fiscal/homologacao',
+  '/erp/contabilidade/plano-de-contas',
+  '/erp/contabilidade/politicas-de-contabilizacao',
 ] as const;
 
 export const MENUS_CANONICOS = [...MENUS_OPERACIONAIS, ...MENUS_ERP] as const;
@@ -66,7 +68,7 @@ export function menusDesconhecidos(hrefs: string[]): string[] {
 /**
  * Menus visíveis por perfil — transcrição da coluna "Perfis RBAC" da matriz de
  * rastreabilidade v1.1 (linhas 3–41), invertida de rota→perfis para perfil→rotas.
- * Total: 126 pares da matriz v1.1 + 5 rotas ERP no administrador. Alterar aqui exige alterar a matriz (decisão 7).
+ * Total: 126 pares da matriz v1.1 + 7 rotas ERP no administrador (5 fiscais, o plano de contas e as políticas de contabilização). Alterar aqui exige alterar a matriz (decisão 7).
  */
 export const MENUS_VISIVEIS_POR_PERFIL: Record<string, string[]> = {
   administrador: [...MENUS_CANONICOS],

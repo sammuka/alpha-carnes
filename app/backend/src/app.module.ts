@@ -36,6 +36,8 @@ import { EnquadramentosFiscaisModule } from './modules/erp/fiscal/enquadramentos
 import { RegrasTributariasModule } from './modules/erp/fiscal/regras/regras-tributarias.module';
 import { SimulacoesFiscaisModule } from './modules/erp/fiscal/simulacoes/simulacoes-fiscais.module';
 import { HomologacoesRegrasModule } from './modules/erp/fiscal/homologacoes/homologacoes-regras.module';
+import { PlanoContasModule } from './modules/contabilidade/plano/plano.module';
+import { PoliticasContabilizacaoModule } from './modules/contabilidade/politicas/politicas.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -108,6 +110,8 @@ import { logRedact, logTestSink } from './common/logging/redact';
     RegrasTributariasModule,
     SimulacoesFiscaisModule,
     HomologacoesRegrasModule,
+    PlanoContasModule,
+    PoliticasContabilizacaoModule,
   ],
   controllers: [HealthController],
   providers: [

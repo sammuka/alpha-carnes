@@ -16,6 +16,10 @@ const PERMISSOES_POR_PERFIL = JSON.parse(
   readFileSync(join(RBAC, 'perfil-permissoes.snapshot.json'), 'utf8'),
 ) as Record<string, string[]>;
 
+const ROTA_PLANO = '/erp/contabilidade/plano-de-contas';
+const ROTA_POLITICAS = '/erp/contabilidade/politicas-de-contabilizacao';
+const ROTAS_FORA_DA_OPERACAO = [ROTA_PLANO, ROTA_POLITICAS];
+
 /**
  * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a rota.
  * É a fonte contra a qual `menus_visiveis` é conferido: são as mesmas 126 atribuições.
@@ -63,16 +67,18 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
 };
 
-/** Rotas do ERP integrado: empresas (AD-24), enquadramentos e regras (H-E01-12), só no administrador. */
+/** Rotas do ERP integrado: fiscais (AD-24, H-E01-12), plano de contas (E09-T01) e políticas (E09-T02), só no administrador. */
 const MATRIZ_ERP: Record<string, string[]> = {
   '/fiscal/empresas': ['administrador'],
   '/fiscal/enquadramentos': ['administrador'],
   '/fiscal/regras': ['administrador'],
   '/fiscal/simulador': ['administrador'],
   '/fiscal/homologacao': ['administrador'],
+  [ROTA_PLANO]: ['administrador'],
+  [ROTA_POLITICAS]: ['administrador'],
 };
 
-/** Matriz v1.1 (39 rotas, 126 atribuições) + ERP (5 rotas, 5 atribuições) = 44 rotas, 131. */
+/** Matriz v1.1 (39 rotas, 126 atribuições) + ERP (7 rotas, 7 atribuições) = 46 rotas, 133. */
 const MATRIZ_COMPLETA: Record<string, string[]> = { ...MATRIZ_RASTREABILIDADE, ...MATRIZ_ERP };
 
 /** Decisão 25 da Onda 2 — as 26 rotas que o gate de grupo retirava do menu. Devem estar visíveis. */
@@ -107,11 +113,11 @@ const EXTRAS_HERDADOS: Record<string, string[]> = {
  */
 const TODOS = [
   'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
-  'CARGA', 'FATURAMENTO', 'FISCAL', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  'CARGA', 'FATURAMENTO', 'FISCAL', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 const GRUPOS_ESPERADOS: Record<string, string[]> = {
   administrador: TODOS,
-  gestor: TODOS.filter((titulo) => titulo !== 'FISCAL'),
+  gestor: TODOS.filter((titulo) => titulo !== 'FISCAL' && titulo !== 'CONTABILIDADE'),
   compras: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'CADASTROS & REGRAS'],
   comercial: ['COMERCIAL', 'GESTÃO', 'DESOSSA'],
   recebimento_pesagem: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'ESTOQUE'],
@@ -186,24 +192,25 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre exatamente as 39 rotas da v1.1 e o menu soma a rota do ERP (AD-15, AD-24)', () => {
-    const semFiscal = ROTAS_CANONICAS.filter((href) => !href.startsWith('/fiscal/'));
+  it('a matriz transcrita cobre exatamente as 39 rotas da v1.1 e o menu soma as rotas do ERP (AD-15, AD-24)', () => {
+    const semFiscal = ROTAS_CANONICAS.filter((href) => !href.startsWith('/fiscal/') && !href.startsWith('/erp/'));
     expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...semFiscal].sort());
     expect(semFiscal).toHaveLength(39);
     expect(Object.keys(MATRIZ_COMPLETA).sort()).toEqual([...ROTAS_CANONICAS].sort());
-    expect(ROTAS_CANONICAS).toHaveLength(44);
+    expect(ROTAS_CANONICAS).toHaveLength(46);
+    expect(ROTAS_CANONICAS).toEqual(expect.arrayContaining(ROTAS_FORA_DA_OPERACAO));
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 126 atribuicoes da v1.1 + 5 do ERP = 131 (AD-15 revogou 2 rotas da AD-11)', () => {
+  it('a matriz soma 126 atribuicoes da v1.1 + 7 do ERP = 133 (AD-15 revogou 2 rotas da AD-11)', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(130 + 1);
+    expect(total).toBe(133);
     expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(126);
-    expect(Object.values(MATRIZ_ERP).reduce((s, p) => s + p.length, 0)).toBe(5);
-    expect(Object.values(MATRIZ_COMPLETA).reduce((s, p) => s + p.length, 0)).toBe(131);
+    expect(Object.values(MATRIZ_ERP).reduce((s, p) => s + p.length, 0)).toBe(7);
+    expect(Object.values(MATRIZ_COMPLETA).reduce((s, p) => s + p.length, 0)).toBe(133);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -345,8 +352,26 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(44);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(130 + 1);
+    expect(ROTAS_CANONICAS).toHaveLength(46);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(133);
+
+    const chavesPlano = ['CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR'];
+    expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPlano));
+    for (const perfil of PERFIS) {
+      if (perfil === 'administrador') continue;
+      for (const chave of chavesPlano) {
+        expect(PERMISSOES_POR_PERFIL[perfil]).not.toContain(chave);
+      }
+    }
+
+    const chavesPolitica = ['CONTABILIDADE_POLITICA_LER', 'CONTABILIDADE_POLITICA_GERENCIAR'];
+    expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPolitica));
+    for (const perfil of PERFIS) {
+      if (perfil === 'administrador') continue;
+      for (const chave of chavesPolitica) {
+        expect(PERMISSOES_POR_PERFIL[perfil]).not.toContain(chave);
+      }
+    }
 
     // E as permissões novas chegaram ao snapshot, nos perfis de D21.
     const novas = [
