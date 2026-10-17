@@ -3,7 +3,7 @@
  * O segundo administrador homologa a regra que o primeiro submeteu.
  */
 import * as fs from 'node:fs';
-import { test, expect, type Browser, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { BACKEND_URL } from './helpers/onda6-seed';
 import {
   criarCenarioHomologacao,
@@ -30,8 +30,16 @@ const ITENS_ANTERIORES = [
   'Simulador fiscal e memória de cálculo',
 ];
 
+// O `browser` vive o worker inteiro: contexto não fechado segue aberto nos specs seguintes da mesma execução,
+// com tempo real e recargas do next dev disputando o servidor (Portão 2 r5, bateria combinada).
+const contextosAbertos: BrowserContext[] = [];
+test.afterEach(async () => {
+  await Promise.all(contextosAbertos.splice(0).map((contexto) => contexto.close()));
+});
+
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL });
+  contextosAbertos.push(context);
   await context.addInitScript(() => sessionStorage.removeItem('fiscal.homologacoes.lista'));
   await entrarNoFrontend(context, baseURL, usuario);
   return context.newPage();

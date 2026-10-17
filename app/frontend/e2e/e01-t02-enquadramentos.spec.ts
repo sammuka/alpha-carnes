@@ -2,7 +2,7 @@
  * E01-T02 — Operações fiscais e enquadramentos: jornada, autorização e acessibilidade.
  * O seed de apoio vai pela API; CFOP 5102 e NCM 02013000 nascem no diálogo da tela.
  */
-import { test, expect, type Browser, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import {
   criarBase,
   criarEnquadramento,
@@ -41,8 +41,16 @@ function valorDoCampo(page: Page, rotulo: string): Locator {
   return page.locator(`p:text-is("${rotulo}") + div`);
 }
 
+// O `browser` vive o worker inteiro: contexto não fechado segue aberto nos specs seguintes da mesma execução,
+// com tempo real e recargas do next dev disputando o servidor (Portão 2 r5, bateria combinada).
+const contextosAbertos: BrowserContext[] = [];
+test.afterEach(async () => {
+  await Promise.all(contextosAbertos.splice(0).map((contexto) => contexto.close()));
+});
+
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL });
+  contextosAbertos.push(context);
   await context.addInitScript(() => sessionStorage.removeItem('fiscal.enquadramentos.lista'));
   await entrarNoFrontend(context, baseURL, usuario);
   return context.newPage();
