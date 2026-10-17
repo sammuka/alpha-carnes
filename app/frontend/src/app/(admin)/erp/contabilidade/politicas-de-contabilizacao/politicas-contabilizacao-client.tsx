@@ -17,6 +17,8 @@ import { CampoForm } from '@/components/fiscal/comum/campo-form';
 import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
 import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
 import { rotuloDataHora } from '@/lib/fiscal-enquadramentos';
+import { lerMensagem as lerMensagemComRotulos } from '@/components/contabilidade/mensagem-erro';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 const CHAVE_RASCUNHO = 'politicas-de-contabilizacao';
 const POR_PAGINA = 20; // mesmo valor de PAGINA em politicas.service.ts
@@ -123,29 +125,30 @@ function dataBr(iso: string | null): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/** Valor em reais da tela para a API: aceita 123,45, 1.234,56 e 0,01 (milhar com ponto, kiro §5); '' se fora do formato. */
 function valorApi(texto: string): string {
-  const casado = /^(\d{1,13}),(\d{2})$/.exec(texto.trim());
-  return casado ? `${casado[1]}.${casado[2]}` : '';
+  const casado = /^(\d{1,3}(?:\.\d{3})+|\d+),(\d{2})$/.exec(texto.trim());
+  if (!casado) return '';
+  const inteiro = casado[1]!.replace(/\./g, '').replace(/^0+(?=\d)/, '');
+  return inteiro.length <= 13 ? `${inteiro}.${casado[2]}` : '';
 }
 
-function textoMensagem(message: unknown): string {
-  if (typeof message === 'string') return message;
-  if (Array.isArray(message)) return message.map(String).join(' ');
-  if (message && typeof message === 'object' && 'message' in message) {
-    return textoMensagem((message as { message: unknown }).message);
-  }
-  return '';
-}
+/** Rótulo visível de cada campo do DTO, para a mensagem de validação dizer o que falta. */
+const ROTULOS_POLITICA: Record<string, string> = {
+  contaDebitoCodigo: 'Conta de débito',
+  contaCreditoCodigo: 'Conta de crédito',
+  centroCodigo: 'Centro de custo',
+  tipoEvento: 'Tipo de ocorrência',
+  competencia: 'Competência',
+  vigenciaInicio: 'Início de vigência',
+  justificativa: 'Justificativa auditável',
+  numero: 'Versão',
+};
+const ROTULOS_ACAO: Record<string, string> = { ...ROTULOS_POLITICA, justificativa: 'Justificativa / observação', valor: 'Valor' };
+const JUSTIFICATIVA_CURTA = 'Informe justificativa para demonstrar a decisão auditável (mínimo de 3 caracteres).';
 
-async function lerMensagem(resposta: Response): Promise<string> {
-  const texto = await resposta.text();
-  if (!texto) return '';
-  try {
-    const corpo = JSON.parse(texto) as { message?: unknown };
-    return textoMensagem(corpo.message);
-  } catch {
-    return texto;
-  }
+function lerMensagem(resposta: Response, rotulos: Record<string, string> = ROTULOS_POLITICA): Promise<string> {
+  return lerMensagemComRotulos(resposta, rotulos);
 }
 
 const NAO_CONFIRMADO = 'O servidor não confirmou a operação. Atualize a tela e confira a situação.';
@@ -222,6 +225,11 @@ export function PoliticasContabilizacaoClient({
   const [lookup, setLookup] = useState<CampoCadastro | null>(null);
   const [buscaLookup, setBuscaLookup] = useState('');
   const botoesLookup = useRef<Partial<Record<CampoCadastro, HTMLButtonElement | null>>>({});
+  // Foco volta ao botão que abriu o drawer (o Radix só devolve sozinho ao SheetTrigger).
+  const gatilhoDrawer = useRef<HTMLElement | null>(null);
+  function lembrarGatilho() {
+    gatilhoDrawer.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
 
   useEffect(() => {
     const cru = sessionStorage.getItem(CHAVE_RASCUNHO);
@@ -357,6 +365,7 @@ export function PoliticasContabilizacaoClient({
   }
 
   function abrirCriar() {
+    lembrarGatilho();
     setForm(FORM_VAZIO);
     setSalvo(JSON.stringify(FORM_VAZIO));
     setDrawer('criar');
@@ -365,6 +374,7 @@ export function PoliticasContabilizacaoClient({
 
   function abrirEditar() {
     if (!selecionada) return;
+    lembrarGatilho();
     const proximo: Formulario = {
       contaDebitoCodigo: selecionada.contaDebitoCodigo,
       contaCreditoCodigo: selecionada.contaCreditoCodigo,
@@ -395,14 +405,15 @@ export function PoliticasContabilizacaoClient({
       return;
     }
     const valor = valorApi(valorTexto);
-    if (!justificativaModal.trim()) {
-      setAviso('Informe justificativa para demonstrar a decisão auditável.');
+    if (!justificativaValida(justificativaModal)) {
+      setAviso(JUSTIFICATIVA_CURTA);
       return;
     }
     if (acao === 'simular' && !valor) {
-      setAviso('Valor é obrigatório.');
+      setAviso(valorTexto.trim() ? 'Informe o valor no formato 1.234,56.' : 'Valor é obrigatório.');
       return;
     }
+    const justificativa = normalizarJustificativa(justificativaModal);
     if (acao === 'simular' && /^0+\.00$/.test(valor)) {
       setAviso('Valor deve ser maior que zero.');
       return;
@@ -418,7 +429,7 @@ export function PoliticasContabilizacaoClient({
           body: JSON.stringify({
             acao,
             codigos: marcadas,
-            justificativa: justificativaModal,
+            justificativa,
             numeroPorCodigo: Object.fromEntries(
               linhas.filter((linha) => marcadas.includes(linha.codigo)).map((linha) => [linha.codigo, linha.numero]),
             ),
@@ -429,11 +440,11 @@ export function PoliticasContabilizacaoClient({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(acao === 'simular'
-            ? { numero: atual!.numero, valor, justificativa: justificativaModal }
-            : { numero: atual!.numero, justificativa: justificativaModal }),
+            ? { numero: atual!.numero, valor, justificativa }
+            : { numero: atual!.numero, justificativa }),
         });
       if (!resposta.ok) {
-        setAviso(await lerMensagem(resposta));
+        setAviso(await lerMensagem(resposta, ROTULOS_ACAO));
         return;
       }
       const corpo = await lerCorpo(resposta);
@@ -476,22 +487,23 @@ export function PoliticasContabilizacaoClient({
   }
 
   async function gravar() {
-    if (!form.justificativa.trim()) {
-      setAviso('Informe justificativa para demonstrar a decisão auditável.');
+    if (!justificativaValida(form.justificativa)) {
+      setAviso(JUSTIFICATIVA_CURTA);
       return;
     }
+    const corpoForm = { ...form, justificativa: normalizarJustificativa(form.justificativa) };
     const criando = drawer !== 'editar';
     if (!criando && !selecionada) return;
     const resposta = criando
       ? await fetch('/api/contabilidade/politicas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(corpoForm),
       })
       : await fetch(`/api/contabilidade/politicas/${encodeURIComponent(selecionada!.codigo)}/editar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, numero: selecionada!.numero }),
+        body: JSON.stringify({ ...corpoForm, numero: selecionada!.numero }),
       });
     if (!resposta.ok) {
       setAviso(await lerMensagem(resposta));
@@ -746,6 +758,13 @@ export function PoliticasContabilizacaoClient({
           aria-describedby={undefined}
           className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]"
           onEscapeKeyDown={(evento) => { if (lookup) evento.preventDefault(); }}
+          onCloseAutoFocus={(evento) => {
+            const gatilho = gatilhoDrawer.current;
+            if (gatilho?.isConnected) {
+              evento.preventDefault();
+              gatilho.focus();
+            }
+          }}
         >
           <SheetHeader className="border-b border-border p-5">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Contabilidade</span>
