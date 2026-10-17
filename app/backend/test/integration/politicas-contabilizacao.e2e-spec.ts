@@ -702,6 +702,20 @@ describe('entrada inválida responde 400 e não grava', () => {
         .rejects.toMatchObject(ESPERADO('conflito concorrente', politica.codigo, 409));
     });
 
+    it('a listagem devolve as contagens de em revisão e suspensas de todas as políticas, sem o filtro da grade', async () => {
+      await prepararContasAnaliticas();
+      const revisada = await service.configurar(dtoConfigurar(), autorId);
+      const suspensa = await service.configurar(dtoConfigurar({ competencia: '2026-11' }), autorId);
+      await service.configurar(dtoConfigurar({ competencia: '2026-12' }), autorId);
+      await db.execute(sql`update politica_versoes v set situacao = 'REVIEW' from politicas_contabilizacao p
+        where p.id = v.politica_id and p.codigo = ${revisada.codigo}`);
+      await db.execute(sql`update politica_versoes v set situacao = 'SUSPENDED' from politicas_contabilizacao p
+        where p.id = v.politica_id and p.codigo = ${suspensa.codigo}`);
+      const lista = await service.listar({ pagina: 1, q: 'nada casa', competencia: '', situacao: 'DRAFT', ordenar: 'competencia', direcao: 'asc' });
+      expect(lista.total).toBe(0);
+      expect(lista.contagens).toEqual({ revisao: 1, suspensos: 1 });
+    });
+
     it('historico recusa política inexistente e devolve simulação e aprovação em ordem do mais novo', async () => {
       await expect(service.historico('NAO-EXISTE')).rejects.toMatchObject({ status: 404 });
       await prepararContasAnaliticas();

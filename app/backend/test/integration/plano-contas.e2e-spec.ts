@@ -204,6 +204,17 @@ describe('Plano de contas', () => {
     return res.rows[0].total as number;
   }
 
+  it('a listagem devolve as contagens de em revisão e bloqueadas de todo o plano, sem o filtro da grade', async () => {
+    const conta = await contaAprovadaAnalitica();
+    await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueio' }, userId);
+    await service.criar(dtoBase({ codigo: '2', classificacao: 'sintetica', contaPaiCodigo: null, centroCodigo: 'CT1' }), userId);
+    await service.revisarCompetencia('2', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.criar(dtoBase({ codigo: '3', classificacao: 'sintetica', contaPaiCodigo: null, centroCodigo: 'CT1' }), userId);
+    const lista = await service.listar({ pagina: 1, q: 'nada casa', situacao: 'DRAFT', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(lista.total).toBe(0);
+    expect(lista.contagens).toEqual({ revisao: 1, suspensos: 1 });
+  });
+
   it('não versiona conta suspensa e não nasce rascunho', async () => {
     const conta = await contaAprovadaAnalitica();
     await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueio' }, userId);

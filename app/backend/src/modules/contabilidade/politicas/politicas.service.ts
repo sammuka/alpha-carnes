@@ -34,6 +34,7 @@ import { ConflitoPoliticaException, RegraPoliticaException } from './regra-polit
 
 type Banco = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Banco['transaction']>[0]>[0];
+export interface ContagensPoliticas { revisao: number; suspensos: number }
 
 const PAGINA = 20;
 
@@ -391,7 +392,7 @@ export class PoliticasContabilizacaoService {
     return `\uFEFF${corpo}`;
   }
 
-  async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number }> {
+  async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number; contagens: ContagensPoliticas }> {
     const filtro = this.filtro(query);
     const ordem = this.ordemDe(query);
     // Lista e total no mesmo instantâneo: sem isso, uma gravação entre as duas consultas gera itens vazio com total 1.
@@ -409,7 +410,26 @@ export class PoliticasContabilizacaoService {
       ))
       .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
       .where(filtro);
-      return { itens: linhas.map((linha) => this.apresentar(linha)), total: Number(contagem?.total ?? 0) };
+      // KPIs da tela (Em revisão, Bloqueados) sobre a última versão de todas as políticas, sem o filtro da grade.
+      const [kpi] = await tx.select({
+        revisao: sql<number>`count(*) filter (where ${politicaVersoes.situacao} = 'REVIEW')::int`,
+        suspensos: sql<number>`count(*) filter (where ${politicaVersoes.situacao} = 'SUSPENDED')::int`,
+      })
+        .from(politicasContabilizacao)
+        .innerJoin(politicaVersoes, and(
+          eq(politicaVersoes.politicaId, politicasContabilizacao.id),
+          isNull(politicaVersoes.deletedAt),
+          sql`${politicaVersoes.numero} = (
+            select max(v2.numero) from politica_versoes v2
+            where v2.politica_id = ${politicasContabilizacao.id} and v2.deleted_at is null
+          )`,
+        ))
+        .where(isNull(politicasContabilizacao.deletedAt));
+      return {
+        itens: linhas.map((linha) => this.apresentar(linha)),
+        total: Number(contagem?.total ?? 0),
+        contagens: { revisao: Number(kpi?.revisao ?? 0), suspensos: Number(kpi?.suspensos ?? 0) },
+      };
     }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
   }
 

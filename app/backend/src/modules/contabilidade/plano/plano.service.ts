@@ -33,6 +33,7 @@ import { LIMITE_OPCOES_PAI, opcoesPaiVigentes, ultimaVersaoDecidida } from './vi
 
 type Banco = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Banco['transaction']>[0]>[0];
+export interface ContagensPlano { revisao: number; suspensos: number }
 
 const NATUREZA_ROTULO: Record<string, string> = {
   ATIVO: 'Ativo',
@@ -157,15 +158,33 @@ export class PlanoContasService {
     this.eventEmitter.emit(EVENTOS.CENTRO_CUSTO_CRIADO, { codigo: dto.codigo, acao: 'criar', situacao: 'APPROVED' });
   }
 
-  async listar(query: ListarPlanoQuery): Promise<{ itens: ContaApresentada[]; total: number }> {
-    const { linhas, total } = await this.consultar(query, true);
-    return { itens: linhas.map((linha) => this.apresentar(linha)), total };
+  async listar(query: ListarPlanoQuery): Promise<{ itens: ContaApresentada[]; total: number; contagens: ContagensPlano }> {
+    // Lista, total e contagens no mesmo instantâneo: sem isso, uma gravação entre as consultas gera itens e total divergentes.
+    return this.db.transaction(async (tx) => {
+      const { linhas, total } = await this.consultarEm(tx, query, true);
+      return { itens: linhas.map((linha) => this.apresentar(linha)), total, contagens: await this.contagens(tx) };
+    }, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+  }
+
+  /** KPIs da tela (Em revisão, Bloqueados) sobre a última versão de todas as contas, sem o filtro da grade. */
+  private async contagens(tx: Tx): Promise<ContagensPlano> {
+    const [linha] = await tx.select({
+      revisao: sql<number>`count(*) filter (where ${contaVersoes.situacao} = 'REVIEW')::int`,
+      suspensos: sql<number>`count(*) filter (where ${contaVersoes.situacao} = 'SUSPENDED')::int`,
+    })
+      .from(contaVersoes)
+      .innerJoin(contasContabeis, eq(contasContabeis.id, contaVersoes.contaId))
+      .where(and(
+        isNull(contasContabeis.deletedAt),
+        isNull(contaVersoes.deletedAt),
+        sql`${contaVersoes.numero} = (select max(v2.numero) from conta_versoes v2 where v2.conta_id = ${contaVersoes.contaId} and v2.deleted_at is null)`,
+      ));
+    return { revisao: Number(linha?.revisao ?? 0), suspensos: Number(linha?.suspensos ?? 0) };
   }
 
   async obter(codigo: string): Promise<ContaApresentada> {
     const { linhas } = await this.consultar(
       { pagina: 1, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' },
-      false,
       codigo,
     );
     const linha = linhas[0];
@@ -211,7 +230,7 @@ export class PlanoContasService {
   }
 
   async exportarCsv(query: ListarPlanoQuery): Promise<string> {
-    const { linhas: bruto } = await this.consultar(query, false);
+    const { linhas: bruto } = await this.consultar(query);
     const itens = bruto.map((linha) => this.apresentar(linha));
     const cabecalho = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];
     const linhas = itens.map((item) => [
@@ -636,13 +655,9 @@ export class PlanoContasService {
     return false;
   }
 
-  private async consultar(query: ListarPlanoQuery, paginar: boolean, codigoExato?: string) {
-    // Lista e total no mesmo instantâneo: sem isso, uma gravação entre as duas consultas gera itens e total divergentes.
-    if (!paginar) return this.consultarEm(this.db, query, false, codigoExato);
-    return this.db.transaction(
-      (tx) => this.consultarEm(tx, query, true, codigoExato),
-      { isolationLevel: 'repeatable read', accessMode: 'read only' },
-    );
+  /** Sem paginação (ficha e CSV); a listagem paginada roda em listar(), na transação de leitura. */
+  private consultar(query: ListarPlanoQuery, codigoExato?: string) {
+    return this.consultarEm(this.db, query, false, codigoExato);
   }
 
   private async consultarEm(executor: Banco | Tx, query: ListarPlanoQuery, paginar: boolean, codigoExato?: string) {
