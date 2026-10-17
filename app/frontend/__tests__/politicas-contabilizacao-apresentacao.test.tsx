@@ -753,3 +753,47 @@ describe('selects do drawer independem da busca da lista (Portão 2 r3)', () => 
     expect(within(screen.getByRole('combobox', { name: 'Ordenar por' })).queryByRole('option', { name: 'Situação' })).not.toBeInTheDocument();
   });
 });
+
+describe('Portão 2 r5: guarda de envio em voo no drawer e no modal', () => {
+  function mockPostAdiado() {
+    const post = adiavel();
+    const posts: string[] = [];
+    const fetchMock = jest.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push(url);
+        return post.promessa;
+      }
+      if (url === '/api/contabilidade/politicas/opcoes') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ contas: [{ codigo: '1.1.01', nome: 'Caixa' }], centros: [] }) });
+      }
+      return Promise.resolve(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 }));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return { post, posts };
+  }
+
+  it.each([
+    ['Configurar mappings', '/api/contabilidade/politicas'],
+    ['Editar versão', '/api/contabilidade/politicas/LIQUIDACAO-2026-10/editar'],
+  ])('%s: duplo clique grava uma vez e, em voo, Voltar e Escape não fecham o drawer', async (abrir, url) => {
+    const user = userEvent.setup();
+    const { post, posts } = mockPostAdiado();
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getAllByRole('button', { name: abrir })[0]!);
+    await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
+    const gravar = screen.getAllByRole('button', { name: 'Configurar mappings' }).at(-1)!;
+    fireEvent.click(gravar);
+    fireEvent.click(gravar);
+    await user.dblClick(gravar);
+    expect(posts).toEqual([url]);
+    expect(gravar).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Voltar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Verificar dados' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Voltar' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByLabelText('Justificativa auditável')).toBeInTheDocument();
+    await act(async () => { post.resolver(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))); });
+    await waitFor(() => expect(screen.queryByLabelText('Justificativa auditável')).not.toBeInTheDocument());
+    expect(posts).toHaveLength(1);
+  });
+});

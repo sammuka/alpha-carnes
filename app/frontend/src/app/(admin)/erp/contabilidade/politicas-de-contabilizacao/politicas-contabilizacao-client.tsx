@@ -216,7 +216,9 @@ export function PoliticasContabilizacaoClient({
   const [filtroSituacao, setFiltroSituacao] = useState('');
   const [ordenar, setOrdenar] = useState<string>('competencia');
   const [direcao, setDirecao] = useState<'asc' | 'desc'>('asc');
+  // Guarda de envio em voo (mesmo padrão da T01): um clique a mais não gera segundo POST nem segunda auditoria.
   const [enviando, setEnviando] = useState(false);
+  const emVoo = useRef(false);
   const [carregando, setCarregando] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [total, setTotal] = useState(totalInicial);
@@ -399,6 +401,7 @@ export function PoliticasContabilizacaoClient({
   }
 
   async function confirmarLoteOuAcao(acao: 'simular' | 'aprovar') {
+    if (emVoo.current) return;
     const atual = alvo();
     if (!atual && marcadas.length <= 1) {
       setAviso('Selecione uma política na lista.');
@@ -420,6 +423,7 @@ export function PoliticasContabilizacaoClient({
     }
     const emLote = marcadas.length > 1;
     const token = sequenciaModal.current;
+    emVoo.current = true;
     setEnviando(true);
     try {
       const resposta = emLote
@@ -482,18 +486,33 @@ export function PoliticasContabilizacaoClient({
     } catch {
       setAviso('Não foi possível concluir a operação. Tente novamente.');
     } finally {
+      emVoo.current = false;
       setEnviando(false);
     }
   }
 
   async function gravar() {
+    if (emVoo.current) return;
     if (!justificativaValida(form.justificativa)) {
       setAviso(JUSTIFICATIVA_CURTA);
       return;
     }
-    const corpoForm = { ...form, justificativa: normalizarJustificativa(form.justificativa) };
     const criando = drawer !== 'editar';
     if (!criando && !selecionada) return;
+    emVoo.current = true;
+    setEnviando(true);
+    try {
+      await gravarEmVoo(criando);
+    } catch {
+      setAviso('Não foi possível concluir a operação. Tente novamente.');
+    } finally {
+      emVoo.current = false;
+      setEnviando(false);
+    }
+  }
+
+  async function gravarEmVoo(criando: boolean) {
+    const corpoForm = { ...form, justificativa: normalizarJustificativa(form.justificativa) };
     const resposta = criando
       ? await fetch('/api/contabilidade/politicas', {
         method: 'POST',
@@ -547,6 +566,7 @@ export function PoliticasContabilizacaoClient({
   }
 
   async function validar() {
+    if (emVoo.current) return;
     const resposta = await fetch('/api/contabilidade/politicas/validar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -586,6 +606,7 @@ export function PoliticasContabilizacaoClient({
   }
 
   function voltar() {
+    if (emVoo.current) return;
     if (JSON.stringify(form) !== salvo && !window.confirm('Há alterações não salvas. Deseja sair?')) return;
     setDrawer(null);
   }
@@ -757,7 +778,8 @@ export function PoliticasContabilizacaoClient({
         <SheetContent
           aria-describedby={undefined}
           className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]"
-          onEscapeKeyDown={(evento) => { if (lookup) evento.preventDefault(); }}
+          onEscapeKeyDown={(evento) => { if (lookup || emVoo.current) evento.preventDefault(); }}
+          onInteractOutside={(evento) => { if (emVoo.current) evento.preventDefault(); }}
           onCloseAutoFocus={(evento) => {
             const gatilho = gatilhoDrawer.current;
             if (gatilho?.isConnected) {
@@ -831,9 +853,9 @@ export function PoliticasContabilizacaoClient({
             {!modal && avisoNaTela}
           </div>
           <SheetFooter className="flex-row justify-end border-t border-border px-5 py-3">
-            <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
-            <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
-            <Button type="button" onClick={() => void gravar()}>Configurar mappings</Button>
+            <Button type="button" variant="secondary" disabled={enviando} onClick={voltar}>Voltar</Button>
+            <Button type="button" variant="secondary" disabled={enviando} onClick={() => void validar()}>Verificar dados</Button>
+            <Button type="button" disabled={enviando} aria-busy={enviando || undefined} onClick={() => void gravar()}>Configurar mappings</Button>
           </SheetFooter>
           {lookup && (
             <LookupCadastro
@@ -871,7 +893,7 @@ export function PoliticasContabilizacaoClient({
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
-            <Button type="button" disabled={enviando} onClick={() => modal && void confirmarLoteOuAcao(modal)}>Confirmar</Button>
+            <Button type="button" disabled={enviando} aria-busy={enviando || undefined} onClick={() => modal && void confirmarLoteOuAcao(modal)}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

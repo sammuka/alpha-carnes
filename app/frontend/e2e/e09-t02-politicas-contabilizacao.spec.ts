@@ -386,3 +386,77 @@ test('a 760px o seletor "Ordenar por" substitui o cabeçalho e recarrega a lista
   await expect(page.getByText(/Ordenação por coluna/)).toBeVisible();
   await admin.close();
 });
+
+test('duplo clique em Configurar mappings e em Editar versão grava uma vez; em voo Voltar e Escape não fecham o drawer', async ({ browser, baseURL, playwright }) => {
+  const api = await playwright.request.newContext();
+  let propria: PlanoDaJornada;
+  try {
+    propria = await criarPlanoDaJornada(api);
+  } finally {
+    await api.dispose();
+  }
+  const competencia = competenciaUnica();
+  const codigo = `LIQUIDACAO-${competencia}`;
+  const admin = await browser.newContext({ baseURL });
+  try {
+    const page = await admin.newPage();
+    await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+    const posts: string[] = [];
+    page.on('request', (pedido) => {
+      if (pedido.method() === 'POST') posts.push(new URL(pedido.url()).pathname);
+    });
+    // Resposta adiada: o envio fica em voo enquanto os cliques extras chegam.
+    const adiar = async (rota: import('@playwright/test').Route) => {
+      if (rota.request().method() === 'POST') await new Promise((pronto) => setTimeout(pronto, 1500));
+      await rota.continue();
+    };
+    await page.route('**/api/contabilidade/politicas', adiar);
+    await page.route('**/api/contabilidade/politicas/*/editar', adiar);
+        const historico = async () => {
+      const resposta = await page.request.get(`/api/contabilidade/politicas/${codigo}/historico`);
+      expect(resposta.ok(), `GET historico: ${resposta.status()}`).toBeTruthy();
+      return (await resposta.json() as unknown[]).length;
+    };
+
+    await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+    const hidratada = page.waitForResponse((resposta) => new URL(resposta.url()).searchParams.get('q') === propria.debitoNome);
+    await page.getByLabel('Buscar registros da lista').fill(propria.debitoNome);
+    expect((await hidratada).ok()).toBeTruthy();
+
+    await page.getByRole('button', { name: 'Configurar mappings' }).first().click();
+    const debito = page.getByLabel('Conta de débito', { exact: true });
+    await expect(debito.locator('option', { hasText: propria.debitoNome })).toHaveCount(1);
+    await debito.selectOption({ label: propria.debitoNome });
+    await page.getByLabel('Conta de crédito', { exact: true }).selectOption({ label: propria.creditoNome });
+    await page.getByLabel('Centro de custo', { exact: true }).selectOption({ label: propria.centroNome });
+    await page.getByLabel('Tipo de ocorrência', { exact: true }).selectOption({ label: 'Liquidação' });
+    await page.getByLabel('Competência', { exact: true }).fill(competencia);
+    await page.getByLabel('Início de vigência', { exact: true }).fill(ONTEM);
+    await page.getByLabel('Justificativa auditável', { exact: true }).fill('abre a regra');
+    const dadosPrincipais = page.getByRole('heading', { name: 'Dados principais' });
+    const gravar = page.getByRole('button', { name: 'Configurar mappings' }).last();
+    await gravar.dblclick();
+    await expect(gravar).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Voltar', exact: true })).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dadosPrincipais).toBeVisible();
+    await expect(dadosPrincipais).toBeHidden({ timeout: 15_000 });
+    await expect(page.getByRole('cell', { name: 'Liquidação', exact: true })).toHaveCount(1);
+    await expect(page.getByText('evento duplicado', { exact: true })).toHaveCount(0);
+    expect(posts.filter((caminho) => caminho === '/api/contabilidade/politicas')).toHaveLength(1);
+    const auditoriasAntes = await historico();
+
+    await page.getByRole('cell', { name: 'Liquidação', exact: true }).click();
+    await page.getByRole('button', { name: 'Editar versão', exact: true }).click();
+    await page.getByLabel('Justificativa auditável', { exact: true }).fill('ajusta a versão');
+    await gravar.dblclick();
+    await expect(gravar).toBeDisabled();
+    await page.keyboard.press('Escape');
+    await expect(dadosPrincipais).toBeVisible();
+    await expect(dadosPrincipais).toBeHidden({ timeout: 15_000 });
+    expect(posts.filter((caminho) => caminho === `/api/contabilidade/politicas/${codigo}/editar`)).toHaveLength(1);
+    expect(await historico()).toBe(auditoriasAntes + 1);
+  } finally {
+    await admin.close();
+  }
+});
