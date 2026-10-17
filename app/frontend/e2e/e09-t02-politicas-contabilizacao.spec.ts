@@ -86,7 +86,7 @@ test('administrador configura, simula e outra pessoa aprova', async ({ browser, 
   await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
   await expect(page).not.toHaveURL(/e\d{2}-t\d{2}/i);
   await expect(page.getByRole('heading', { name: 'Políticas de contabilização' })).toBeVisible();
-  await expect(page.getByText('Provisório')).toBeVisible();
+  await expect(page.getByText('Provisório').first()).toBeVisible();
   await configurarPolitica(page, competencia);
   // O banco acumula políticas de outras execuções: a busca isola as linhas desta jornada.
   await page.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
@@ -111,6 +111,8 @@ test('administrador configura, simula e outra pessoa aprova', async ({ browser, 
   await expect(page.getByRole('cell', { name: 'Aprovado', exact: true })).toHaveCount(0);
   await expect(page.getByText('concluído com evidência', { exact: true })).toHaveCount(0);
   expect((await politicaPelaApi(page, competencia))?.situacao).toBe('DRAFT');
+  // O modal do DS bloqueia o fundo: fecha antes de trocar de aba.
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
   await page.getByRole('tab', { name: 'Regras e validações' }).click();
   await expect(page.getByText('origem imutável, não lançar sem mapeamento correto, balanceamento exato')).toBeVisible();

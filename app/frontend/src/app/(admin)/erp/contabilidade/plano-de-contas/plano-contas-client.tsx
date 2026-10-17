@@ -1,22 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { AbasContabeis, type Aba } from '@/components/contabilidade/abas-contabeis';
+import { GradeContabil, SeloSituacao, type ColunaContabil } from '@/components/contabilidade/grade-contabil';
+import { CampoForm } from '@/components/fiscal/comum/campo-form';
+import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
+import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
 
 const CHAVE_RASCUNHO = 'e09-t01-plano';
 
-const ABAS = ['Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes'] as const;
+const POR_PAGINA = 20; // mesmo valor de PAGINA em plano.service.ts
 const EXCECOES = ['Conta desativada', 'Mudança de classificação após fechamento'];
-const ACEITE = [
-  'Todos os campos de negócio e seus formatos são exibidos e validados',
-  'Ações de cadastro, edição, confirmação, cancelamento e versões possuem estados visíveis',
-  'Regras de negócio do backend e pré-condições são verificadas',
-  'Fluxos negativos exibem erros e não produzem gravações parciais',
-  'Permissões e segregação das aprovações são auditáveis',
-  'Concorrência, duplicação e reprocessamento seguros são testados',
-  'Interface respeita DS v3, teclado, estados vazios e tratamento de loading/erro',
-  'Integrações e batch possuem evidência de contrato, sandbox e rastreabilidade',
-];
 const COLUNAS: { rotulo: string; ordenar?: 'contaContabil' | 'naturezaConta' | 'centroCusto' | 'vigenciaInicio' | 'vigenciaFim' }[] = [
   { rotulo: 'Conta contábil', ordenar: 'contaContabil' },
   { rotulo: 'Situação' },
@@ -62,7 +65,6 @@ export type ContaGrade = {
   alteradoEm: string;
 };
 
-type Aba = (typeof ABAS)[number];
 type Modal = 'bloquear' | 'mapear' | 'versionar' | 'aprovar' | 'revisar-competencia';
 type Ordenar = NonNullable<(typeof COLUNAS)[number]['ordenar']>;
 type Centro = { codigo: string; nome: string };
@@ -80,6 +82,27 @@ type Formulario = {
   vigenciaFim: string;
   justificativa: string;
 };
+
+/** Referência do requisito (catalogo.js, E09-T01). */
+const REFERENCIA: Array<[string, string]> = [
+  ['Campos', 'conta sintética/analítica, código, natureza, grupo, validade, centro custo'],
+  ['Ações', 'criar, versionar, aprovar, bloquear conta e mapear lançamentos'],
+  ['Regras', 'partida dobrada, níveis hierárquicos válidos, competência obrigatória'],
+  ['Exceções', 'conta desativada, mudança de classificação após fechamento'],
+];
+const TITULOS_MODAL: Record<Modal, string> = {
+  bloquear: 'Bloquear conta e mapear lançamentos',
+  mapear: 'Bloquear conta e mapear lançamentos',
+  versionar: 'Versionar',
+  aprovar: 'Aprovar',
+  'revisar-competencia': 'Revisar competência',
+};
+const DICA_CADASTRO = 'Vinculado a cadastro existente; seleção obrigatória no formulário.';
+const DICA_ENUM = 'Valor pertencente ao conjunto de opções do domínio.';
+const CONTROLE = 'h-8 w-full rounded-md border border-border-strong bg-background px-2 text-xs disabled:bg-surface-2 read-only:bg-surface-2';
+const AREA = 'min-h-16 w-full rounded-md border border-border-strong bg-background px-2 py-1.5 text-xs';
+
+type Contagens = { revisao: number; suspensos: number };
 
 const FORM_VAZIO: Formulario = {
   codigo: '',
@@ -186,7 +209,12 @@ function corpoConta(form: Formulario) {
   };
 }
 
-export function PlanoContasClient({ inicial, totalInicial = inicial.length, semAcesso = false }: { inicial: ContaGrade[]; totalInicial?: number; semAcesso?: boolean }) {
+export function PlanoContasClient({ inicial, totalInicial = inicial.length, contagensIniciais = null, semAcesso = false }: {
+  inicial: ContaGrade[];
+  totalInicial?: number;
+  contagensIniciais?: Contagens | null;
+  semAcesso?: boolean;
+}) {
   const [contas, setContas] = useState(inicial);
   const [total, setTotal] = useState(totalInicial);
   const [codigoSelecionado, setCodigoSelecionado] = useState(inicial[0]?.codigo ?? '');
@@ -219,6 +247,12 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, semA
   const [centroNovo, setCentroNovo] = useState({ codigo: '', nome: '', justificativa: '' });
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [acessoNegado, setAcessoNegado] = useState(semAcesso);
+  const [contagens, setContagens] = useState<Contagens | null>(contagensIniciais);
+  const [carregando, setCarregando] = useState(false);
+  const [erroLista, setErroLista] = useState('');
+  const [carregandoEventos, setCarregandoEventos] = useState(false);
+  const [erroEventos, setErroEventos] = useState<string | null>(null);
+  const sequenciaLista = useRef(0);
 
   const selecionada = contas.find((conta) => conta.codigo === codigoSelecionado) ?? contas[0];
 
@@ -242,20 +276,36 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, semA
       ordenar: consulta.ordenar,
       direcao: consulta.direcao,
     });
-    const resposta = await fetch(`/api/contabilidade/plano?${qs}`);
-    if (resposta.status === 403) {
-      setAcessoNegado(true);
-      setAviso('Acesso não permitido');
-      return;
+    const minha = (sequenciaLista.current += 1);
+    setCarregando(true);
+    try {
+      const resposta = await fetch(`/api/contabilidade/plano?${qs}`);
+      if (minha !== sequenciaLista.current) return;
+      if (resposta.status === 403) {
+        setAcessoNegado(true);
+        setAviso('Acesso não permitido');
+        return;
+      }
+      if (!resposta.ok) {
+        setErroLista((await lerMensagem(resposta)) || 'Não foi possível atualizar a lista. Tente novamente.');
+        return;
+      }
+      const corpo = await resposta.json() as { itens?: ContaGrade[]; total?: number; contagens?: Contagens };
+      if (minha !== sequenciaLista.current) return;
+      aplicarLista(corpo);
+    } catch {
+      if (minha === sequenciaLista.current) setErroLista('Não foi possível atualizar a lista. Tente novamente.');
+    } finally {
+      if (minha === sequenciaLista.current) setCarregando(false);
     }
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
-      return;
-    }
-    const corpo = await resposta.json() as { itens?: ContaGrade[]; total?: number };
+  }
+
+  function aplicarLista(corpo: { itens?: ContaGrade[]; total?: number; contagens?: Contagens }) {
     const itens = corpo.itens ?? [];
+    setErroLista('');
     setContas(itens);
     setTotal(corpo.total ?? itens.length);
+    if (corpo.contagens) setContagens(corpo.contagens);
     // A lista mudou (página, filtro, ordenação ou gravação): marcas de outra visão não seguem para o lote.
     setMarcadas([]);
     setCodigoSelecionado((atual) => itens.some((item) => item.codigo === atual) ? atual : (itens[0]?.codigo ?? ''));
@@ -505,12 +555,20 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, semA
   async function consultarHistorico(destino: Aba) {
     setAba(destino);
     if (!selecionada) return;
-    const resposta = await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/historico`);
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
-      return;
+    setCarregandoEventos(true);
+    setErroEventos(null);
+    try {
+      const resposta = await fetch(`/api/contabilidade/plano/${encodeURIComponent(selecionada.codigo)}/historico`);
+      if (!resposta.ok) {
+        setErroEventos((await lerMensagem(resposta)) || 'Não foi possível carregar o histórico. Tente novamente.');
+        return;
+      }
+      setEventos(await resposta.json() as Evento[]);
+    } catch {
+      setErroEventos('Não foi possível carregar o histórico. Tente novamente.');
+    } finally {
+      setCarregandoEventos(false);
     }
-    setEventos(await resposta.json() as Evento[]);
   }
 
   async function exportar() {
@@ -538,17 +596,40 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, semA
     return dataBr(conta.vigenciaFim);
   }
 
+  const colunasGrade: ColunaContabil<ContaGrade>[] = COLUNAS.map((coluna) => ({
+    rotulo: coluna.rotulo,
+    ordenar: coluna.ordenar,
+    celula: (conta) => (coluna.rotulo === 'Situação'
+      ? <SeloSituacao situacao={conta.situacao} rotulo={conta.situacaoRotulo} />
+      : valorCelula(conta, coluna.rotulo)),
+  }));
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const avisoNaTela = aviso ? <p role="status" className="rounded-md bg-info-soft p-2.5 text-xs text-info-fg">{aviso}</p> : null;
+
+  function irParaPagina(nova: number) {
+    setPagina(nova);
+    void carregar({ pagina: nova });
+  }
+
   if (acessoNegado) {
     return (
-      <>
-        <h1>Plano de contas e centros de custo</h1>
-        <p>Acesso não permitido</p>
-      </>
+      <div className="grid gap-4">
+        <PageHeader title="Plano de contas e centros de custo" />
+        <EmptyState title="Acesso não permitido" description="A permissão é conferida no servidor." />
+      </div>
     );
   }
 
+  const acoesDominio: Array<{ rotulo: string; abrir: () => void }> = [
+    { rotulo: 'Criar', abrir: abrirCriar },
+    { rotulo: 'Versionar', abrir: () => setModal('versionar') },
+    { rotulo: 'Aprovar', abrir: () => setModal('aprovar') },
+    { rotulo: 'Bloquear conta e mapear lançamentos', abrir: () => setModal('bloquear') },
+    { rotulo: 'Revisar competência', abrir: () => setModal('revisar-competencia') },
+  ];
+
   return (
-    <>
+    <div className="grid gap-4">
       <style>{`
         .plano-cartoes { display: none; }
         @media (max-width: 800px) {
@@ -556,255 +637,335 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, semA
           .plano-cartoes { display: grid; gap: 12px; }
         }
       `}</style>
-      <h1>Plano de contas e centros de custo</h1>
-      <p>Acesso típico: contador/controladoria <BadgeProvisorio texto="Provisório" /></p>
-      <button type="button" onClick={() => void exportar()}>Exportar</button>
-      <button type="button" onClick={abrirCriar}>+ Novo registro</button>
-      <button type="button" onClick={() => setProcesso(true)}>Ações do processo</button>
-      <button type="button" onClick={voltar}>Voltar</button>
-      <div>
-        <button type="button" onClick={abrirCriar}>Criar</button>
-        <button type="button" onClick={() => setModal('versionar')}>Versionar</button>
-        <button type="button" onClick={() => setModal('aprovar')}>Aprovar</button>
-        <button type="button" onClick={() => setModal('bloquear')}>Bloquear conta e mapear lançamentos</button>
-        <button type="button" onClick={() => setModal('revisar-competencia')}>Revisar competência</button>
-      </div>
-      <div>
-        <input aria-label="Buscar registros da lista" placeholder="Pesquisar descrição ou referência de negócio" value={busca} onChange={(evento) => {
-          const q = evento.target.value;
-          setBusca(q);
-          guardarRascunho({ q });
-          void carregar({ q, pagina: 1 });
-          setPagina(1);
-        }} />
-        <select aria-label="Filtrar situação" value={situacao} onChange={(evento) => {
-          const valor = evento.target.value;
-          setSituacao(valor);
-          guardarRascunho({ situacao: valor });
-          void carregar({ situacao: valor, pagina: 1 });
-          setPagina(1);
-        }}>
-          {FILTROS.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
-        </select>
-        <button type="button" onClick={() => void exportar()}>Exportar visão</button>
-      </div>
-      <div className="plano-grade">
-        <table>
-          <thead>
-            <tr>
-              <th><span className="sr-only">Selecionar</span></th>
-              {COLUNAS.map((coluna) => (
-                <th key={coluna.rotulo}>
-                  {coluna.ordenar ? (
-                    <button type="button" aria-label={`Ordenar por ${coluna.rotulo}`} onClick={() => ordenarPor(coluna.ordenar!)}>
-                      {coluna.rotulo}
-                    </button>
-                  ) : coluna.rotulo}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {contas.length === 0 ? (
-              <tr>
-                <td colSpan={7}>Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.</td>
-              </tr>
-            ) : contas.map((conta) => (
-              <tr key={conta.codigo} onClick={() => setCodigoSelecionado(conta.codigo)}>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Selecionar ${conta.nome}`}
-                    checked={marcadas.includes(conta.codigo)}
-                    onChange={() => setMarcadas((atual) => atual.includes(conta.codigo) ? atual.filter((item) => item !== conta.codigo) : [...atual, conta.codigo])}
-                  />
-                </td>
-                {COLUNAS.map((coluna) => <td key={coluna.rotulo}>{valorCelula(conta, coluna.rotulo)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="plano-cartoes">
-        {contas.map((conta) => (
-          <article key={conta.codigo}>
-            {COLUNAS.map((coluna) => (
-              <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {valorCelula(conta, coluna.rotulo)}</p>
-            ))}
-          </article>
-        ))}
-      </div>
-      <p>Exibindo {contas.length} de {total}</p>
-      <button type="button" onClick={() => { const nova = Math.max(1, pagina - 1); setPagina(nova); void carregar({ pagina: nova }); }}>Anterior</button>
-      <button type="button" onClick={() => { const nova = pagina + 1; setPagina(nova); void carregar({ pagina: nova }); }}>Próxima</button>
-      <div role="tablist">
-        {ABAS.map((nome) => (
-          <button key={nome} type="button" role="tab" aria-selected={aba === nome} onClick={() => {
-            if (nome === 'Histórico' || nome === 'Movimentações') void consultarHistorico(nome);
-            else setAba(nome);
-          }}>{nome}</button>
-        ))}
-      </div>
-      {aba === 'Ficha e campos' && selecionada && (
-        <section>
-          <h2>Dados principais</h2>
-          <p>Conta contábil {selecionada.nome}</p>
-          <p>Natureza da conta {selecionada.naturezaRotulo}</p>
-          <p>Centro de custo {selecionada.centroNome}</p>
-          <p>Início de vigência {dataBr(selecionada.vigenciaInicio)}</p>
-          <p>Fim de vigência {dataBr(selecionada.vigenciaFim)}</p>
-          <p>Situação {selecionada.situacaoRotulo}</p>
-          <p>Grupo {selecionada.grupo}</p>
-          <p>Conta sintética/analítica {selecionada.classificacaoRotulo}</p>
-          <p>Empresa —</p>
-          <p>Responsável {selecionada.responsavelNome}</p>
-          <button type="button" onClick={abrirEditar}>Editar versão</button>
-          <button type="button" onClick={() => void validar()}>Validar pré-condições</button>
-          <button type="button" onClick={() => void consultarHistorico('Histórico')}>Consultar histórico</button>
-        </section>
-      )}
-      {aba === 'Movimentações' && (
-        <table>
-          <thead>
-            <tr>
-              <th>Acontecimento</th>
-              <th>Origem</th>
-              <th>Efeito</th>
-              <th>Situação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {eventos.map((evento) => (
-              <tr key={`${evento.quando}-${evento.acontecimento}`}>
-                <td>{evento.acontecimento}</td>
-                <td>{evento.quem}</td>
-                <td>{evento.justificativa}</td>
-                <td>{selecionada?.situacaoRotulo ?? ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {aba === 'Regras e validações' && <p>partida dobrada, níveis hierárquicos válidos, competência obrigatória</p>}
-      {aba === 'Exceções' && EXCECOES.map((texto) => (
-        <p key={texto}><b>Bloqueio / exceção:</b> {texto}.</p>
-      ))}
-      {aba === 'Histórico' && eventos.map((evento) => (
-        <p key={`${evento.quando}-${evento.acontecimento}`}>{evento.acontecimento} {quandoBr(evento.quando)} {evento.quem}</p>
-      ))}
-      {aba === 'Integrações' && <p>Esta tela não chama serviço externo.</p>}
-      {aba === 'Aceite e testes' && (
-        <ul>
-          {ACEITE.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      )}
-      {processo && (
-        <button type="button" onClick={() => { setProcesso(false); setModal('mapear'); }}>Abrir decisão →</button>
-      )}
-      {drawer && (
-        <section>
-          <h2>Dados principais</h2>
-          <button type="button" aria-label="Pesquisar centro de custo" onClick={() => void pesquisarCentros()}>Pesquisar</button>
-          {centrosVazios && (
-            <>
-              <p>Nenhum cadastro disponível para seleção. Consulte a área responsável.</p>
-              <label htmlFor="centro-codigo">Código</label>
-              <input id="centro-codigo" value={centroNovo.codigo} onChange={(evento) => setCentroNovo({ ...centroNovo, codigo: evento.target.value })} />
-              <label htmlFor="centro-nome">Centro de custo</label>
-              <input id="centro-nome" value={centroNovo.nome} onChange={(evento) => setCentroNovo({ ...centroNovo, nome: evento.target.value })} />
-              <label htmlFor="centro-motivo">Motivo da alteração</label>
-              <textarea id="centro-motivo" value={centroNovo.justificativa} onChange={(evento) => setCentroNovo({ ...centroNovo, justificativa: evento.target.value })} />
-              <button type="button" onClick={() => void criarCentro()}>+ Novo registro</button>
-            </>
-          )}
-          <label htmlFor="conta-codigo">Código</label>
-          <input id="conta-codigo" value={form.codigo} readOnly={drawer === 'editar'} onChange={(evento) => setForm({ ...form, codigo: evento.target.value })} />
-          <label htmlFor="conta-nome">Conta contábil</label>
-          <input id="conta-nome" placeholder="Informe conta contábil" value={form.nome} onChange={(evento) => setForm({ ...form, nome: evento.target.value })} />
-          <label htmlFor="conta-classe">Conta sintética/analítica</label>
-          <select id="conta-classe" value={form.classificacao} onChange={(evento) => setForm({ ...form, classificacao: evento.target.value as Formulario['classificacao'] })}>
-            <option value="sintetica">sintética</option>
-            <option value="analitica">analítica</option>
-          </select>
-          <label htmlFor="conta-natureza">Natureza da conta</label>
-          <select id="conta-natureza" value={form.natureza} onChange={(evento) => setForm({ ...form, natureza: evento.target.value as Formulario['natureza'] })}>
-            {NATUREZAS.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
-          </select>
-          <label htmlFor="conta-grupo">Grupo</label>
-          <input id="conta-grupo" value={form.grupo} onChange={(evento) => setForm({ ...form, grupo: evento.target.value })} />
-          <label htmlFor="conta-pai">Conta contábil</label>
-          <div className="flex items-center gap-2">
-            <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
-              <option value="">Selecione conta contábil</option>
-              {form.contaPaiCodigo && <option value={form.contaPaiCodigo}>{paiRotulo || form.contaPaiCodigo}</option>}
-            </select>
-            <button type="button" ref={botaoPesquisaPai} aria-label="Pesquisar conta contábil" title="Pesquisar cadastro pelo nome" onClick={abrirPesquisaPai}>Pesquisar</button>
-          </div>
-          <p>Vinculado a cadastro existente; seleção obrigatória no formulário.</p>
-          <label htmlFor="conta-centro">Centro de custo</label>
-          <select id="conta-centro" value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
-            <option value="">Selecione</option>
-            {centros.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
-          </select>
-          <label htmlFor="conta-inicio">Início de vigência</label>
-          <input id="conta-inicio" type="date" value={form.vigenciaInicio} onChange={(evento) => setForm({ ...form, vigenciaInicio: evento.target.value })} />
-          <label htmlFor="conta-fim">Fim de vigência</label>
-          <input id="conta-fim" type="date" value={form.vigenciaFim} onChange={(evento) => setForm({ ...form, vigenciaFim: evento.target.value })} />
-          <label htmlFor="conta-situacao">Situação</label>
-          <select id="conta-situacao" disabled value="DRAFT">
-            <option value="DRAFT">Rascunho</option>
-          </select>
-          <label htmlFor="review-justification">Motivo da alteração</label>
-          <textarea id="review-justification" value={form.justificativa} onChange={(evento) => setForm({ ...form, justificativa: evento.target.value })} />
-          <button type="button" onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</button>
-          <button type="button" onClick={() => void validar()}>Verificar dados</button>
-        </section>
-      )}
-      {lookupPai && (
-        <div
-          ref={popupPai}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Selecionar Conta contábil"
-          className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
-        >
-          <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg">
-            <div>
-              <h2>Selecionar Conta contábil</h2>
-              <button type="button" onClick={fecharPesquisaPai}>Fechar</button>
+      <PageHeader
+        title="Plano de contas e centros de custo"
+        subtitle="criar, versionar, aprovar, bloquear conta e mapear lançamentos."
+        badge={(
+          <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            Acesso típico: contador/controladoria <BadgeProvisorio />
+          </span>
+        )}
+      >
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
+        <Button type="button" onClick={abrirCriar}>+ Novo registro</Button>
+        <Button type="button" onClick={() => setProcesso(true)}>Ações do processo <ChevronDown aria-hidden="true" /></Button>
+      </PageHeader>
+      <KpiStrip>
+        <Kpi label="Em revisão" value={contagens?.revisao ?? '—'} />
+        <Kpi label="Bloqueados" value={contagens?.suspensos ?? '—'} />
+      </KpiStrip>
+      {!modal && !drawer && avisoNaTela}
+      <div className="grid grid-cols-1 items-start gap-3.5 min-[1250px]:grid-cols-[minmax(0,1.34fr)_minmax(340px,1fr)]">
+        <Card className="min-w-0">
+          <CardHeader><CardTitle><h2>Registros e consultas</h2></CardTitle></CardHeader>
+          <CardContent className="grid min-w-0 grid-cols-1 gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                aria-label="Buscar registros da lista"
+                placeholder="Pesquisar descrição ou referência de negócio"
+                className={`${CONTROLE} max-w-[280px]`}
+                value={busca}
+                onChange={(evento) => {
+                  const q = evento.target.value;
+                  setBusca(q);
+                  guardarRascunho({ q });
+                  void carregar({ q, pagina: 1 });
+                  setPagina(1);
+                }}
+              />
+              <select
+                aria-label="Filtrar situação"
+                className={`${CONTROLE} max-w-[190px]`}
+                value={situacao}
+                onChange={(evento) => {
+                  const valor = evento.target.value;
+                  setSituacao(valor);
+                  guardarRascunho({ situacao: valor });
+                  void carregar({ situacao: valor, pagina: 1 });
+                  setPagina(1);
+                }}
+              >
+                {FILTROS.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
+              </select>
+              <span className="flex-1" />
+              <Button type="button" size="sm" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
             </div>
-            <input
-              type="search"
-              autoFocus
-              placeholder="Pesquisar pelo nome ou descrição"
-              aria-label="Pesquisar cadastro"
-              value={paiBusca}
-              onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }}
+            {erroLista && (
+              <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/40 p-3 text-xs text-destructive">
+                {erroLista}
+                <Button type="button" size="sm" variant="secondary" onClick={() => void carregar()}>Tentar novamente</Button>
+              </div>
+            )}
+            {carregando ? <p role="status" aria-busy="true" className="text-xs text-muted-foreground">Carregando…</p> : null}
+            <GradeContabil
+              className="plano-grade"
+              colunas={colunasGrade}
+              linhas={contas}
+              total={total}
+              pagina={pagina}
+              totalPaginas={totalPaginas}
+              ordenar={ordenar}
+              direcao={direcao}
+              carregando={carregando}
+              selecionado={selecionada?.codigo}
+              marcadas={marcadas}
+              rotuloLinha={(conta) => conta.nome}
+              onSelecionar={setCodigoSelecionado}
+              onMarcar={(codigo) => setMarcadas((atual) => atual.includes(codigo) ? atual.filter((item) => item !== codigo) : [...atual, codigo])}
+              onOrdenar={(chave) => ordenarPor(chave as Ordenar)}
+              onPagina={irParaPagina}
             />
-            <div>
-              {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
-                <button type="button" key={opcao.codigo} onClick={() => escolherPai(opcao)}>
-                  <b>{opcao.nome}</b>
-                  <small>{opcao.codigo}</small>
-                </button>
+            <div className="plano-cartoes">
+              {contas.map((conta) => (
+                <article key={conta.codigo} className="grid gap-1 rounded-md border border-border p-3 text-xs">
+                  {COLUNAS.map((coluna) => (
+                    <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {valorCelula(conta, coluna.rotulo)}</p>
+                  ))}
+                </article>
               ))}
             </div>
-            {erroPais && <p role="alert">{erroPais}</p>}
-            {paisTruncado && <p>Refine a busca para ver mais contas.</p>}
-            <p>A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</p>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader><CardTitle><h2>Detalhamento e execução</h2></CardTitle></CardHeader>
+          <CardContent className="min-w-0">
+            <AbasContabeis
+              aba={aba}
+              onAba={(nome) => {
+                if (nome === 'Histórico' || nome === 'Movimentações') void consultarHistorico(nome);
+                else setAba(nome);
+              }}
+              eventos={eventos}
+              carregandoEventos={carregandoEventos}
+              erroEventos={erroEventos}
+              situacao={selecionada ? { situacao: selecionada.situacao, rotulo: selecionada.situacaoRotulo } : null}
+              regras="partida dobrada, níveis hierárquicos válidos, competência obrigatória"
+              excecoes={EXCECOES}
+              referencia={REFERENCIA}
+              ficha={selecionada ? (
+                <div className="grid gap-4 text-sm">
+                  <div>
+                    <SecaoRotulo>Informações do registro selecionado</SecaoRotulo>
+                    <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Dados principais</p>
+                    <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                      <Campo label="Conta contábil">{selecionada.nome}</Campo>
+                      <CampoDica label="Conta sintética/analítica" dica={DICA_ENUM}>{selecionada.classificacaoRotulo}</CampoDica>
+                      <CampoDica label="Natureza da conta" dica={DICA_ENUM}>{selecionada.naturezaRotulo}</CampoDica>
+                      <Campo label="Grupo">{selecionada.grupo}</Campo>
+                      <CampoDica label="Centro de custo" dica={DICA_CADASTRO}>{selecionada.centroNome}</CampoDica>
+                      <Campo label="Início de vigência">{dataBr(selecionada.vigenciaInicio)}</Campo>
+                      <Campo label="Fim de vigência">{dataBr(selecionada.vigenciaFim)}</Campo>
+                    </div>
+                  </div>
+                  <div>
+                    <SecaoRotulo>Trilha e responsabilização</SecaoRotulo>
+                    <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                      <Campo label="Empresa"><span className="flex flex-wrap items-center gap-2">— <BadgeProvisorio /></span></Campo>
+                      <Campo label="Situação"><SeloSituacao situacao={selecionada.situacao} rotulo={selecionada.situacaoRotulo} /></Campo>
+                      <Campo label="Responsável">{selecionada.responsavelNome}</Campo>
+                      <Campo label="Alterado em">{quandoBr(selecionada.alteradoEm)}</Campo>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={abrirEditar}>Editar versão</Button>
+                    <Button type="button" variant="secondary" onClick={() => void validar()}>Validar pré-condições</Button>
+                    <Button type="button" variant="secondary" onClick={() => void consultarHistorico('Histórico')}>Consultar histórico</Button>
+                  </div>
+                </div>
+              ) : <EmptyState title="Selecione um registro na lista para abrir a ficha." />}
+            />
+          </CardContent>
+        </Card>
+      </div>
+      <Card>
+        <CardHeader><CardTitle><h2>Ações do domínio — previstas no contrato completo</h2></CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {acoesDominio.map((acao, indice) => (
+            <Button key={acao.rotulo} type="button" variant={indice === 0 ? 'default' : 'secondary'} onClick={acao.abrir}>{acao.rotulo}</Button>
+          ))}
+        </CardContent>
+      </Card>
+
+      <AcoesProcessoSheet
+        aberto={processo}
+        onFechar={() => setProcesso(false)}
+        descricao="Operações previstas para o plano de contas e os centros de custo"
+        apoio="Confirme permissões, validade, origem e efeitos contábeis antes de registrar."
+        condicionantes={['partida dobrada, níveis hierárquicos válidos, competência obrigatória', 'Exceções: conta desativada, mudança de classificação após fechamento.']}
+        comandos={[
+          { titulo: 'Criar', rotuloAcessivel: 'Abrir decisão: Criar', abrir: () => { setProcesso(false); abrirCriar(); } },
+          { titulo: 'Versionar', rotuloAcessivel: 'Abrir decisão: Versionar', abrir: () => { setProcesso(false); setModal('versionar'); } },
+          { titulo: 'Aprovar', rotuloAcessivel: 'Abrir decisão: Aprovar', abrir: () => { setProcesso(false); setModal('aprovar'); } },
+          { titulo: 'Bloquear conta e mapear lançamentos', abrir: () => { setProcesso(false); setModal('mapear'); } },
+        ]}
+      />
+
+      <Sheet open={drawer !== null} onOpenChange={(aberto) => { if (!aberto) voltar(); }}>
+        <SheetContent
+          aria-describedby={undefined}
+          className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]"
+          onEscapeKeyDown={(evento) => { if (lookupPai) evento.preventDefault(); }}
+        >
+          <SheetHeader className="border-b border-border p-5">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Contabilidade</span>
+            <SheetTitle className="text-lg font-bold">Plano de contas e centros de custo</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-1 flex-col gap-3 p-5">
+            {centrosVazios && (
+              <div className="grid gap-3 rounded-md border border-border bg-surface-2 p-3">
+                <p className="text-xs text-muted-foreground">Nenhum cadastro disponível para seleção. Consulte a área responsável.</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <CampoForm rotulo="Código" htmlFor="centro-codigo">
+                    <input id="centro-codigo" className={CONTROLE} value={centroNovo.codigo} onChange={(evento) => setCentroNovo({ ...centroNovo, codigo: evento.target.value })} />
+                  </CampoForm>
+                  <CampoForm rotulo="Centro de custo" htmlFor="centro-nome">
+                    <input id="centro-nome" className={CONTROLE} value={centroNovo.nome} onChange={(evento) => setCentroNovo({ ...centroNovo, nome: evento.target.value })} />
+                  </CampoForm>
+                  <div className="sm:col-span-2">
+                    <CampoForm rotulo="Motivo da alteração" htmlFor="centro-motivo">
+                      <textarea id="centro-motivo" rows={2} className={AREA} value={centroNovo.justificativa} onChange={(evento) => setCentroNovo({ ...centroNovo, justificativa: evento.target.value })} />
+                    </CampoForm>
+                  </div>
+                </div>
+                <Button type="button" size="sm" className="justify-self-start" onClick={() => void criarCentro()}>+ Novo registro</Button>
+              </div>
+            )}
+            <SecaoRotulo>Dados principais</SecaoRotulo>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <CampoForm rotulo="Código" htmlFor="conta-codigo">
+                <input id="conta-codigo" className={CONTROLE} value={form.codigo} readOnly={drawer === 'editar'} onChange={(evento) => setForm({ ...form, codigo: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Conta contábil" htmlFor="conta-nome">
+                <input id="conta-nome" className={CONTROLE} placeholder="Informe conta contábil" value={form.nome} onChange={(evento) => setForm({ ...form, nome: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Conta sintética/analítica" htmlFor="conta-classe">
+                <select id="conta-classe" className={CONTROLE} value={form.classificacao} onChange={(evento) => setForm({ ...form, classificacao: evento.target.value as Formulario['classificacao'] })}>
+                  <option value="sintetica">sintética</option>
+                  <option value="analitica">analítica</option>
+                </select>
+              </CampoForm>
+              <CampoForm rotulo="Natureza da conta" htmlFor="conta-natureza">
+                <select id="conta-natureza" className={CONTROLE} value={form.natureza} onChange={(evento) => setForm({ ...form, natureza: evento.target.value as Formulario['natureza'] })}>
+                  {NATUREZAS.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}
+                </select>
+              </CampoForm>
+              <CampoForm rotulo="Grupo" htmlFor="conta-grupo">
+                <input id="conta-grupo" className={CONTROLE} value={form.grupo} onChange={(evento) => setForm({ ...form, grupo: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Conta contábil" htmlFor="conta-pai">
+                <div className="flex items-stretch gap-1.5">
+                  <select id="conta-pai" className={`${CONTROLE} min-w-0 flex-1`} ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
+                    <option value="">Selecione conta contábil</option>
+                    {form.contaPaiCodigo && <option value={form.contaPaiCodigo}>{paiRotulo || form.contaPaiCodigo}</option>}
+                  </select>
+                  <Button type="button" size="sm" variant="secondary" ref={botaoPesquisaPai} aria-label="Pesquisar conta contábil" title="Pesquisar cadastro pelo nome" onClick={abrirPesquisaPai}>Pesquisar</Button>
+                </div>
+                <Dica>Vinculado a cadastro existente; seleção obrigatória no formulário.</Dica>
+              </CampoForm>
+              <CampoForm rotulo="Centro de custo" htmlFor="conta-centro">
+                <div className="flex items-stretch gap-1.5">
+                  <select id="conta-centro" className={`${CONTROLE} min-w-0 flex-1`} value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
+                    <option value="">Selecione</option>
+                    {centros.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
+                  </select>
+                  <Button type="button" size="sm" variant="secondary" aria-label="Pesquisar centro de custo" title="Pesquisar cadastro pelo nome" onClick={() => void pesquisarCentros()}>Pesquisar</Button>
+                </div>
+                <Dica>Seleção vinculada ao cadastro; sem digitar identificadores.</Dica>
+              </CampoForm>
+              <CampoForm rotulo="Início de vigência" htmlFor="conta-inicio">
+                <input id="conta-inicio" type="date" className={CONTROLE} value={form.vigenciaInicio} onChange={(evento) => setForm({ ...form, vigenciaInicio: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Fim de vigência" htmlFor="conta-fim">
+                <input id="conta-fim" type="date" className={CONTROLE} value={form.vigenciaFim} onChange={(evento) => setForm({ ...form, vigenciaFim: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Situação" htmlFor="conta-situacao">
+                <select id="conta-situacao" className={CONTROLE} disabled value="DRAFT">
+                  <option value="DRAFT">Rascunho</option>
+                </select>
+              </CampoForm>
+              <div className="sm:col-span-2">
+                <CampoForm rotulo="Motivo da alteração" htmlFor="review-justification">
+                  <textarea id="review-justification" rows={3} className={AREA} placeholder="Por que este cadastro precisa ser criado/alterado?" value={form.justificativa} onChange={(evento) => setForm({ ...form, justificativa: evento.target.value })} />
+                </CampoForm>
+              </div>
+            </div>
+            {!modal && avisoNaTela}
           </div>
-        </div>
-      )}
-      {modal && (
-        <dialog open aria-modal="true">
-          <label htmlFor="action-reason">Justificativa / observação</label>
-          <textarea id="action-reason" value={motivo} onChange={(evento) => setMotivo(evento.target.value)} />
-          <button type="button" onClick={() => { setModal(null); setAviso(''); }}>Cancelar</button>
-          <button type="button" onClick={() => void confirmar()}>Confirmar</button>
-          {aviso ? <p>{aviso}</p> : null}
-        </dialog>
-      )}
-      {aviso && !modal ? <p>{aviso}</p> : null}
-    </>
+          <SheetFooter className="flex-row justify-end border-t border-border px-5 py-3">
+            <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
+            <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
+            <Button type="button" onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</Button>
+          </SheetFooter>
+          {lookupPai && (
+            <div
+              ref={popupPai}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Selecionar Conta contábil"
+              className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
+            >
+              <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-card shadow-lg">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-3">
+                  <h2 className="text-sm font-bold">Selecionar Conta contábil</h2>
+                  <Button type="button" size="sm" variant="secondary" onClick={fecharPesquisaPai}>Fechar</Button>
+                </div>
+                <input
+                  type="search"
+                  autoFocus
+                  placeholder="Pesquisar pelo nome ou descrição"
+                  aria-label="Pesquisar cadastro"
+                  className="m-3 h-9 w-[calc(100%-24px)] rounded-md border border-border-strong px-2 text-xs"
+                  value={paiBusca}
+                  onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }}
+                />
+                <div className="max-h-[315px] overflow-auto">
+                  {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
+                    <button type="button" key={opcao.codigo} className="block w-full border-b border-border px-3.5 py-2.5 text-left hover:bg-surface-2" onClick={() => escolherPai(opcao)}>
+                      <b className="block text-xs">{opcao.nome}</b>
+                      <small className="mt-1 block text-[10px] text-muted-foreground">{opcao.codigo}</small>
+                    </button>
+                  ))}
+                </div>
+                {erroPais && <p role="alert" className="px-3.5 py-2 text-xs text-destructive">{erroPais}</p>}
+                {paisTruncado && <p className="px-3.5 py-2 text-xs text-muted-foreground">Refine a busca para ver mais contas.</p>}
+                <p className="px-3.5 py-2.5 text-[10px] text-muted-foreground">A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</p>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) { setModal(null); setAviso(''); } }}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Ação do domínio: {modal ? TITULOS_MODAL[modal] : ''}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 px-4">
+            <CampoForm rotulo="Justificativa / observação" htmlFor="action-reason">
+              <textarea id="action-reason" rows={3} className={AREA} placeholder="Registre a razão para a decisão" value={motivo} onChange={(evento) => setMotivo(evento.target.value)} />
+            </CampoForm>
+            {avisoNaTela}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => { setModal(null); setAviso(''); }}>Cancelar</Button>
+            <Button type="button" onClick={() => void confirmar()}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Dica({ children }: { children: ReactNode }) {
+  return <span className="mt-1 block text-[11px] text-muted-foreground">{children}</span>;
+}
+
+/** Campo da ficha com a dica do protótipo abaixo do valor (cadastro vinculado ou opção do domínio). */
+function CampoDica({ label, dica, children }: { label: string; dica: string; children: ReactNode }) {
+  return (
+    <div>
+      <Campo label={label}>{children}</Campo>
+      <Dica>{dica}</Dica>
+    </div>
   );
 }

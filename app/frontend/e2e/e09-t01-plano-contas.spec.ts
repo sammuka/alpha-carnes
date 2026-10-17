@@ -69,6 +69,9 @@ async function preencherInicioVigencia(page: Page, iso: string) {
   await expect(popover).toBeHidden();
 }
 
+/** Drawer do formulário (Sheet modal do DS): enquanto aberto, o fundo da tela não recebe clique. */
+const formulario = (page: Page) => page.getByRole('dialog', { name: 'Plano de contas e centros de custo', exact: true });
+
 async function criarCentro(page: Page) {
   await page.getByRole('button', { name: '+ Novo registro', exact: true }).click();
   await page.getByRole('button', { name: 'Pesquisar centro de custo', exact: true }).click();
@@ -76,7 +79,7 @@ async function criarCentro(page: Page) {
   await page.getByLabel('Código', { exact: true }).first().fill('CT-E2E');
   await page.getByLabel('Centro de custo', { exact: true }).first().fill('Operação industrial');
   await page.getByLabel('Motivo da alteração', { exact: true }).first().fill('centro da jornada');
-  await page.getByRole('button', { name: '+ Novo registro', exact: true }).nth(1).click();
+  await formulario(page).getByRole('button', { name: '+ Novo registro', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Operação industrial', exact: true })).toHaveCount(1);
 }
 
@@ -84,7 +87,7 @@ async function criarConta(
   page: Page,
   dados: { codigo: string; nome: string; classificacao: 'sintética' | 'analítica'; pai: string | null },
 ) {
-  await page.getByRole('button', { name: '+ Novo registro', exact: true }).first().click();
+  if (!(await formulario(page).isVisible())) await page.getByRole('button', { name: '+ Novo registro', exact: true }).click();
   await page.getByLabel('Código', { exact: true }).last().fill(dados.codigo);
   await page.getByPlaceholder('Informe conta contábil').fill(dados.nome);
   await page.getByLabel('Conta sintética/analítica', { exact: true }).selectOption({ label: dados.classificacao });
@@ -186,7 +189,7 @@ test.describe('Plano de contas', () => {
     const page = await adminContext.newPage();
     await abrirPlano(page);
     await expect(page.getByRole('heading', { name: 'Plano de contas e centros de custo', exact: true })).toBeVisible();
-    await expect(page.getByText('Provisório', { exact: true })).toBeVisible();
+    await expect(page.getByText('Provisório', { exact: true }).first()).toBeVisible();
     await criarCentro(page);
     await criarConta(page, { codigo: '1', nome: 'Grupo do ativo', classificacao: 'sintética', pai: null });
     await revisarEAprovar(page, 1);
@@ -203,6 +206,7 @@ test.describe('Plano de contas', () => {
     await page.getByLabel('Justificativa / observação', { exact: true }).fill('tenta mapear');
     await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(page.getByText('conta desativada', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
     await page.getByRole('tab', { name: 'Regras e validações', exact: true }).click();
     await expect(page.getByText('partida dobrada, níveis hierárquicos válidos, competência obrigatória', { exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Exceções', exact: true }).click();
@@ -241,6 +245,7 @@ test.describe('Plano de contas', () => {
     await page.getByLabel('Justificativa / observação', { exact: true }).fill('tenta mapear a sintética');
     await page.getByRole('button', { name: 'Confirmar', exact: true }).click();
     await expect(page.getByText('Conta sintética não recebe mapeamento de lançamentos', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
     await page.getByRole('tab', { name: 'Exceções', exact: true }).click();
     await expect(page.getByText('Bloqueio / exceção: Conta desativada.')).toBeVisible();
     await expect(page.getByText('Bloqueio / exceção: Mudança de classificação após fechamento.')).toBeVisible();

@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   PoliticasContabilizacaoClient,
@@ -49,7 +49,8 @@ it('mostra os rótulos da grade e esconde uuid, enum cru e a palavra Marca', () 
   for (const rotulo of ['Competência', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência']) {
     expect(screen.getByRole('button', { name: `Ordenar por ${rotulo}` })).toBeInTheDocument();
   }
-  expect(screen.getByText('Provisório')).toBeInTheDocument();
+  // Selo no cabeçalho (persona) e na ficha (Enquadramento fiscal e Empresa, plano D5).
+  expect(screen.getAllByText('Provisório')).toHaveLength(3);
   expect(screen.getByText('Enquadramento fiscal')).toBeInTheDocument();
   const texto = document.body.textContent ?? '';
   expect(texto).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
@@ -166,6 +167,8 @@ it('a resposta da simulação não fecha o modal de aprovação aberto depois', 
   await user.type(screen.getByLabelText('Valor'), '10,10');
   await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
   await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  // O modal do DS bloqueia o fundo: a pessoa fecha a simulação em voo e abre a aprovação.
+  await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
   expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument();
   await act(async () => {
@@ -568,7 +571,7 @@ describe('lista consistente com o servidor', () => {
     expect(screen.getByText(/Página 1 de 1/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Configurar mappings' }));
     await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
-    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' })[1]!);
+    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' }).at(-1)!);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(fetchMock).toHaveBeenLastCalledWith(
       '/api/contabilidade/politicas?pagina=1&q=&competencia=&situacao=&ordenar=competencia&direcao=asc',
@@ -591,9 +594,10 @@ describe('lista consistente com o servidor', () => {
     render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
     await user.click(screen.getByRole('button', { name: 'Configurar mappings' }));
     await user.type(screen.getByLabelText('Justificativa auditável'), 'abre a regra');
-    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' })[1]!);
+    await user.click(screen.getAllByRole('button', { name: 'Configurar mappings' }).at(-1)!);
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true));
-    await user.type(screen.getByLabelText('Buscar registros da lista'), 'z');
+    // Com o drawer modal aberto o fundo não recebe clique; a mudança da busca chega como evento de change.
+    fireEvent.change(screen.getByLabelText('Buscar registros da lista'), { target: { value: 'z' } });
     const consultaNova = '/api/contabilidade/politicas?pagina=1&q=z&competencia=&situacao=&ordenar=competencia&direcao=asc';
     await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(consultaNova));
     const chamadasAntes = fetchMock.mock.calls.length;
@@ -628,5 +632,51 @@ describe('lista consistente com o servidor', () => {
     await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
     expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('estrutura do DS v3', () => {
+  it('monta cabeçalho, KPIs, grade com selo de situação, paginador, abas e ações do domínio', () => {
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} totalInicial={45} contagensIniciais={{ revisao: 4, suspensos: 1 }} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Políticas de contabilização' })).toBeInTheDocument();
+    for (const [rotulo, valor] of [['Em revisão', '4'], ['Bloqueados', '1']] as const) {
+      expect(within(screen.getByText(rotulo).parentElement!).getByText(valor)).toBeInTheDocument();
+    }
+    expect(screen.getByRole('heading', { name: 'Registros e consultas' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Detalhamento e execução' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Rascunho' }).querySelector('span.rounded-full')).not.toBeNull();
+    expect(screen.getByText('Página 1 de 3')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Próxima página' })).toBeInTheDocument();
+    expect(within(screen.getByRole('tablist')).getAllByRole('tab').map((aba) => aba.textContent)).toEqual([
+      'Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes',
+    ]);
+    for (const nome of ['Exportar', '+ Novo registro', 'Ações do processo', 'Configurar mappings', 'Simular evento', 'Aprovar regra']) {
+      expect(screen.getByRole('button', { name: nome })).toBeInTheDocument();
+    }
+  });
+
+  it('a lista recarregada atualiza os KPIs com as contagens do servidor', async () => {
+    const user = userEvent.setup();
+    global.fetch = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1, contagens: { revisao: 7, suspensos: 2 } })) as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    expect(within(screen.getByText('Em revisão').parentElement!).getByText('—')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+    expect(await within(screen.getByText('Em revisão').parentElement!).findByText('7')).toBeInTheDocument();
+  });
+
+  it('falha da lista oferece Tentar novamente, que refaz a mesma consulta', async () => {
+    const user = userEvent.setup();
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => JSON.stringify({ message: 'Serviço indisponível' }) })
+      .mockResolvedValueOnce(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+    const alerta = await screen.findByRole('alert');
+    expect(alerta).toHaveTextContent('Serviço indisponível');
+    await user.click(within(alerta).getByRole('button', { name: 'Tentar novamente' }));
+    expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(fetchMock.mock.calls[0]?.[0]);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -1,24 +1,36 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { AbasContabeis, type Aba } from '@/components/contabilidade/abas-contabeis';
+import { GradeContabil, SeloSituacao, type ColunaContabil } from '@/components/contabilidade/grade-contabil';
+import { CampoForm } from '@/components/fiscal/comum/campo-form';
+import { Campo, SecaoRotulo } from '@/components/fiscal/empresas/aba-ficha';
+import { AcoesProcessoSheet } from '@/components/fiscal/empresas/acoes-processo-sheet';
+import { rotuloDataHora } from '@/lib/fiscal-enquadramentos';
 
 const CHAVE_RASCUNHO = 'politicas-de-contabilizacao';
 const POR_PAGINA = 20; // mesmo valor de PAGINA em politicas.service.ts
-const ABAS = ['Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes'] as const;
 const EXCECOES = ['Mapeamento ausente', 'Evento duplicado'];
-const ACEITE = [
-  'Todos os campos de negócio e seus formatos são exibidos e validados',
-  'Ações de cadastro, edição, confirmação, cancelamento e versões possuem estados visíveis',
-  'Regras de negócio do backend e pré-condições são verificadas',
-  'Fluxos negativos exibem erros e não produzem gravações parciais',
-  'Permissões e segregação das aprovações são auditáveis',
-  'Concorrência, duplicação e reprocessamento seguros são testados',
-  'Interface respeita DS v3, teclado, estados vazios e tratamento de loading/erro',
-  'Integrações e batch possuem evidência de contrato, sandbox e rastreabilidade',
+/** Referência do requisito (catalogo.js, E09-T02). */
+const REFERENCIA: Array<[string, string]> = [
+  ['Campos', 'evento fonte, regra débito/crédito, centro custo, imposto, versão e data'],
+  ['Ações', 'configurar mappings, simular evento, aprovar regra'],
+  ['Regras', 'origem imutável, não lançar sem mapeamento correto, balanceamento exato'],
+  ['Exceções', 'mapeamento ausente, evento duplicado'],
 ];
+const DICA_CADASTRO = 'Vinculado a cadastro existente; seleção obrigatória no formulário.';
+const DICA_ENUM = 'Valor pertencente ao conjunto de opções do domínio.';
+const CONTROLE = 'h-8 w-full rounded-md border border-border-strong bg-background px-2 text-xs disabled:bg-surface-2';
+const AREA = 'min-h-16 w-full rounded-md border border-border-strong bg-background px-2 py-1.5 text-xs';
 const COLUNAS: { rotulo: string; ordenar?: 'competencia' | 'contaDebito' | 'contaCredito' | 'centroCusto' | 'tipoEvento' }[] = [
   { rotulo: 'Competência', ordenar: 'competencia' },
   { rotulo: 'Situação' },
@@ -69,6 +81,7 @@ export interface PoliticaApresentada {
 }
 
 interface Opcao { codigo: string; nome: string }
+type Contagens = { revisao: number; suspensos: number };
 interface HistoricoLinha { quando: string; quem: string; acontecimento: string; justificativa: string }
 
 type Formulario = {
@@ -157,17 +170,23 @@ function celula(linha: PoliticaApresentada, rotulo: string): string {
 export function PoliticasContabilizacaoClient({
   inicial,
   totalInicial = inicial.length,
+  contagensIniciais = null,
   semAcesso = false,
 }: {
   inicial: PoliticaApresentada[];
   totalInicial?: number;
+  contagensIniciais?: Contagens | null;
   semAcesso?: boolean;
 }) {
   const [marcadas, setMarcadas] = useState<string[]>([]);
   const [linhas, setLinhas] = useState(inicial);
   const [modal, setModal] = useState<'simular' | 'aprovar' | null>(null);
   const [drawer, setDrawer] = useState<'criar' | 'editar' | 'processo' | null>(null);
-  const [aba, setAba] = useState<(typeof ABAS)[number]>('Ficha e campos');
+  const [aba, setAba] = useState<Aba>('Ficha e campos');
+  const [contagens, setContagens] = useState<Contagens | null>(contagensIniciais);
+  const [erroLista, setErroLista] = useState('');
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [erroHistorico, setErroHistorico] = useState<string | null>(null);
   const [aviso, setAviso] = useState('');
   const [valorTexto, setValorTexto] = useState('');
   const [justificativaModal, setJustificativaModal] = useState('');
@@ -232,10 +251,10 @@ export function PoliticasContabilizacaoClient({
         const resposta = await fetch(`/api/contabilidade/politicas?${consulta}`);
         if (minha !== sequenciaLista.current) return;
         if (!resposta.ok) {
-          setAviso(await lerMensagem(resposta));
+          setErroLista((await lerMensagem(resposta)) || 'Não foi possível atualizar a lista. Tente novamente.');
           return;
         }
-        const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[]; total?: number } | null;
+        const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[]; total?: number; contagens?: Contagens } | null;
         if (minha !== sequenciaLista.current) return;
         if (!corpo || !Array.isArray(corpo.itens)) {
           setAviso(NAO_CONFIRMADO);
@@ -248,11 +267,13 @@ export function PoliticasContabilizacaoClient({
         setTotal(novoTotal);
         setMarcadas([]);
         setAviso('');
+        setErroLista('');
+        if (corpo.contagens) setContagens(corpo.contagens);
         if (paginaDaConsulta > ultima) setPagina(ultima);
         return;
       }
     } catch {
-      if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
+      if (minha === sequenciaLista.current) setErroLista('Não foi possível atualizar a lista. Tente novamente.');
     } finally {
       if (minha === sequenciaLista.current) setCarregando(false);
     }
@@ -269,10 +290,10 @@ export function PoliticasContabilizacaoClient({
 
   if (semAcesso) {
     return (
-      <>
-        <h1>Políticas de contabilização</h1>
-        <p>Acesso não permitido</p>
-      </>
+      <div className="grid gap-4">
+        <PageHeader title="Políticas de contabilização" />
+        <EmptyState title="Acesso não permitido" description="A permissão é conferida no servidor." />
+      </div>
     );
   }
 
@@ -497,15 +518,29 @@ export function PoliticasContabilizacaoClient({
     setAviso(corpo.valido ? '' : corpo.mensagens.join(' '));
   }
 
-  async function abrirHistorico(nome: (typeof ABAS)[number]) {
+  async function abrirHistorico(nome: Aba) {
     setAba(nome);
     if (!selecionada || (nome !== 'Histórico' && nome !== 'Movimentações')) return;
-    const resposta = await fetch(`/api/contabilidade/politicas/${encodeURIComponent(selecionada.codigo)}/historico`);
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
-      return;
+    setCarregandoHistorico(true);
+    setErroHistorico(null);
+    try {
+      const resposta = await fetch(`/api/contabilidade/politicas/${encodeURIComponent(selecionada.codigo)}/historico`);
+      if (!resposta.ok) {
+        setErroHistorico((await lerMensagem(resposta)) || 'Não foi possível carregar o histórico. Tente novamente.');
+        return;
+      }
+      setHistorico(await resposta.json() as HistoricoLinha[]);
+    } catch {
+      setErroHistorico('Não foi possível carregar o histórico. Tente novamente.');
+    } finally {
+      setCarregandoHistorico(false);
     }
-    setHistorico(await resposta.json() as HistoricoLinha[]);
+  }
+
+  /** "Tentar novamente" refaz a última consulta da lista (a vigente no ref). */
+  async function tentarDeNovo() {
+    const vigente = ultimaConsulta.current;
+    await consultar(vigente, Number(new URLSearchParams(vigente).get('pagina')) || 1);
   }
 
   function voltar() {
@@ -522,9 +557,25 @@ export function PoliticasContabilizacaoClient({
 
   const contasVisiveis = contas.filter((conta) => conta.nome.toLowerCase().includes(busca.toLowerCase()) || !busca);
   const centrosVisiveis = centros.filter((centro) => centro.nome.toLowerCase().includes(busca.toLowerCase()) || !busca);
+  const avisoNaTela = aviso ? <p role="status" className="rounded-md bg-info-soft p-2.5 text-xs text-info-fg">{aviso}</p> : null;
+  const formularioAberto = drawer === 'criar' || drawer === 'editar';
+
+  const colunasGrade: ColunaContabil<PoliticaApresentada>[] = COLUNAS.map((coluna) => ({
+    rotulo: coluna.rotulo,
+    ordenar: coluna.ordenar,
+    celula: (linha) => (coluna.rotulo === 'Situação'
+      ? <SeloSituacao situacao={linha.situacao} rotulo={linha.situacaoRotulo} />
+      : celula(linha, coluna.rotulo)),
+  }));
+
+  const acoesDominio: Array<{ rotulo: string; abrir: () => void }> = [
+    { rotulo: 'Configurar mappings', abrir: abrirCriar },
+    { rotulo: 'Simular evento', abrir: () => abrirModal('simular') },
+    { rotulo: 'Aprovar regra', abrir: () => abrirModal('aprovar') },
+  ];
 
   return (
-    <>
+    <div className="grid gap-4">
       <style>{`
         .politicas-cartoes { display: none; }
         @media (max-width: 800px) {
@@ -532,252 +583,261 @@ export function PoliticasContabilizacaoClient({
           .politicas-cartoes { display: grid; gap: 12px; }
         }
       `}</style>
-      <h1>Políticas de contabilização</h1>
-      <p>Acesso típico: contador <BadgeProvisorio texto="Provisório" /></p>
-      <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
-      <Button type="button" variant="secondary" onClick={abrirCriar}>+ Novo registro</Button>
-      <Button type="button" onClick={abrirCriar}>Configurar mappings</Button>
-      <Button type="button" variant="secondary" onClick={() => abrirModal('simular')}>Simular evento</Button>
-      <Button type="button" variant="secondary" onClick={() => abrirModal('aprovar')}>Aprovar regra</Button>
-      <Button type="button" variant="secondary" onClick={() => setDrawer('processo')}>Ações do processo</Button>
-      <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
-      <div>
-        <input aria-label="Buscar registros da lista" placeholder="Pesquisar descrição ou referência de negócio" value={busca} onChange={(evento) => { setBusca(evento.target.value); setPagina(1); }} />
-        <input aria-label="Filtrar competência" type="month" value={filtroCompetencia} onChange={(evento) => { setFiltroCompetencia(evento.target.value); setPagina(1); }} />
-        <select aria-label="Filtrar situação" value={filtroSituacao} onChange={(evento) => { setFiltroSituacao(evento.target.value); setPagina(1); }}>
-          {SITUACOES.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
-        </select>
-        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
-      </div>
-      {aviso ? <p role="status">{aviso}</p> : null}
-      {carregando ? <p role="status" aria-busy="true" className="text-sm text-muted-foreground">Carregando…</p> : null}
-      <div className="politicas-grade" aria-busy={carregando}>
-        <table>
-          <thead>
-            <tr>
-              <th><span className="sr-only">Selecionar</span></th>
-              {COLUNAS.map((coluna) => (
-                <th key={coluna.rotulo}>
-                  {coluna.ordenar
-                    ? <button type="button" aria-label={`Ordenar por ${coluna.rotulo}`} onClick={() => ordenarPor(coluna.ordenar!)}>{coluna.rotulo}</button>
-                    : coluna.rotulo}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.length === 0 && carregando ? null : linhas.length === 0 ? (
-              <tr>
-                <td colSpan={7}>Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.</td>
-              </tr>
-            ) : linhas.map((linha) => (
-              <tr key={linha.codigo} onClick={() => setCodigoSelecionado(linha.codigo)}>
-                <td>
+      <PageHeader
+        title="Políticas de contabilização"
+        subtitle="configurar mappings, simular evento, aprovar regra."
+        badge={(
+          <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            Acesso típico: contador <BadgeProvisorio />
+          </span>
+        )}
+      >
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
+        <Button type="button" onClick={abrirCriar}>+ Novo registro</Button>
+        <Button type="button" onClick={() => setDrawer('processo')}>Ações do processo <ChevronDown aria-hidden="true" /></Button>
+      </PageHeader>
+      <KpiStrip>
+        <Kpi label="Em revisão" value={contagens?.revisao ?? '—'} />
+        <Kpi label="Bloqueados" value={contagens?.suspensos ?? '—'} />
+      </KpiStrip>
+      {!modal && !formularioAberto && avisoNaTela}
+      <div className="grid grid-cols-1 items-start gap-3.5 min-[1250px]:grid-cols-[minmax(0,1.34fr)_minmax(340px,1fr)]">
+        <Card className="min-w-0">
+          <CardHeader><CardTitle><h2>Registros e consultas</h2></CardTitle></CardHeader>
+          <CardContent className="grid min-w-0 grid-cols-1 gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input aria-label="Buscar registros da lista" placeholder="Pesquisar descrição ou referência de negócio" className={`${CONTROLE} max-w-[280px]`} value={busca} onChange={(evento) => { setBusca(evento.target.value); setPagina(1); }} />
+              <input aria-label="Filtrar competência" type="month" className={`${CONTROLE} max-w-[170px]`} value={filtroCompetencia} onChange={(evento) => { setFiltroCompetencia(evento.target.value); setPagina(1); }} />
+              <select aria-label="Filtrar situação" className={`${CONTROLE} max-w-[190px]`} value={filtroSituacao} onChange={(evento) => { setFiltroSituacao(evento.target.value); setPagina(1); }}>
+                {SITUACOES.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
+              </select>
+              <span className="flex-1" />
+              <Button type="button" size="sm" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
+            </div>
+            {erroLista && (
+              <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/40 p-3 text-xs text-destructive">
+                {erroLista}
+                <Button type="button" size="sm" variant="secondary" onClick={() => void tentarDeNovo()}>Tentar novamente</Button>
+              </div>
+            )}
+            {carregando ? <p role="status" aria-busy="true" className="text-xs text-muted-foreground">Carregando…</p> : null}
+            <GradeContabil
+              className="politicas-grade"
+              colunas={colunasGrade}
+              linhas={linhas}
+              total={total}
+              pagina={pagina}
+              totalPaginas={totalPaginas}
+              ordenar={ordenar}
+              direcao={direcao}
+              carregando={carregando}
+              selecionado={selecionada?.codigo}
+              marcadas={marcadas}
+              rotuloLinha={(linha) => linha.tipoEventoRotulo}
+              onSelecionar={setCodigoSelecionado}
+              onMarcar={alternar}
+              onOrdenar={ordenarPor}
+              onPagina={setPagina}
+            />
+            <div className="politicas-cartoes" hidden>
+              {linhas.map((linha) => (
+                <article key={linha.codigo} className="grid gap-1 rounded-md border border-border p-3 text-xs">
                   <input
                     type="checkbox"
                     aria-label={`Selecionar ${linha.tipoEventoRotulo}`}
                     checked={marcadas.includes(linha.codigo)}
                     onChange={() => alternar(linha.codigo)}
                   />
-                </td>
-                {COLUNAS.map((coluna) => <td key={coluna.rotulo}>{celula(linha, coluna.rotulo)}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="politicas-cartoes" hidden>
-        {linhas.map((linha) => (
-          <article key={linha.codigo}>
-            <input
-              type="checkbox"
-              aria-label={`Selecionar ${linha.tipoEventoRotulo}`}
-              checked={marcadas.includes(linha.codigo)}
-              onChange={() => alternar(linha.codigo)}
+                  {COLUNAS.map((coluna) => (
+                    <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {celula(linha, coluna.rotulo)}</p>
+                  ))}
+                </article>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader><CardTitle><h2>Detalhamento e execução</h2></CardTitle></CardHeader>
+          <CardContent className="min-w-0">
+            <AbasContabeis
+              aba={aba}
+              onAba={(nome) => void abrirHistorico(nome)}
+              eventos={historico}
+              carregandoEventos={carregandoHistorico}
+              erroEventos={erroHistorico}
+              situacao={selecionada ? { situacao: selecionada.situacao, rotulo: selecionada.situacaoRotulo } : null}
+              regras="origem imutável, não lançar sem mapeamento correto, balanceamento exato"
+              excecoes={EXCECOES}
+              referencia={REFERENCIA}
+              ficha={selecionada ? (
+                <div className="grid gap-4 text-sm">
+                  <div>
+                    <SecaoRotulo>Informações do registro selecionado</SecaoRotulo>
+                    <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Dados principais</p>
+                    <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                      <Campo label="Versão">{selecionada.numero}</Campo>
+                      <Campo label="Competência">{selecionada.competenciaRotulo}</Campo>
+                      <CampoDica label="Conta de débito" dica={DICA_CADASTRO}>{selecionada.contaDebitoNome}</CampoDica>
+                      <CampoDica label="Conta de crédito" dica={DICA_CADASTRO}>{selecionada.contaCreditoNome}</CampoDica>
+                      <CampoDica label="Centro de custo" dica={DICA_CADASTRO}>{selecionada.centroNome}</CampoDica>
+                      <CampoDica label="Tipo de ocorrência" dica={DICA_ENUM}>{selecionada.tipoEventoRotulo}</CampoDica>
+                      <Campo label="Início de vigência">{dataBr(selecionada.vigenciaInicio)}</Campo>
+                      <Campo label="Enquadramento fiscal"><span className="flex flex-wrap items-center gap-2">— <BadgeProvisorio /></span></Campo>
+                    </div>
+                  </div>
+                  <div>
+                    <SecaoRotulo>Trilha e responsabilização</SecaoRotulo>
+                    <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                      <Campo label="Empresa"><span className="flex flex-wrap items-center gap-2">— <BadgeProvisorio /></span></Campo>
+                      <Campo label="Situação"><SeloSituacao situacao={selecionada.situacao} rotulo={selecionada.situacaoRotulo} /></Campo>
+                      <Campo label="Responsável">{selecionada.responsavelNome}</Campo>
+                      <Campo label="Alterado em">{rotuloDataHora(selecionada.alteradoEm)}</Campo>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" onClick={abrirEditar}>Editar versão</Button>
+                    <Button type="button" variant="secondary" onClick={() => void abrirHistorico('Histórico')}>Consultar histórico</Button>
+                    <Button type="button" variant="secondary" onClick={() => void validar()}>Validar pré-condições</Button>
+                  </div>
+                </div>
+              ) : <EmptyState title="Selecione um registro na lista para abrir a ficha." />}
             />
-            {COLUNAS.map((coluna) => (
-              <p key={coluna.rotulo}><b>{coluna.rotulo}</b> {celula(linha, coluna.rotulo)}</p>
-            ))}
-          </article>
-        ))}
+          </CardContent>
+        </Card>
       </div>
-      <p>Exibindo {linhas.length} de {total}</p>
-      <Pagination aria-label="Paginação da lista">
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationLink
-              href="#"
-              size="default"
-              aria-label="Página anterior"
-              aria-disabled={pagina <= 1}
-              onClick={(evento) => { evento.preventDefault(); if (pagina > 1) setPagina(pagina - 1); }}
-            >Anterior</PaginationLink>
-          </PaginationItem>
-          <PaginationItem><span>Página {pagina} de {totalPaginas}</span></PaginationItem>
-          <PaginationItem>
-            <PaginationLink
-              href="#"
-              size="default"
-              aria-label="Próxima página"
-              aria-disabled={pagina >= totalPaginas}
-              onClick={(evento) => { evento.preventDefault(); if (pagina < totalPaginas) setPagina(pagina + 1); }}
-            >Próxima</PaginationLink>
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
-      <div role="tablist">
-        {ABAS.map((nome) => (
-          <button key={nome} type="button" role="tab" aria-selected={aba === nome} onClick={() => void abrirHistorico(nome)}>{nome}</button>
-        ))}
-      </div>
-      {aba === 'Ficha e campos' && selecionada ? (
-        <section>
-          <p>Versão {selecionada.numero}</p>
-          <p>Competência {selecionada.competenciaRotulo}</p>
-          <p>Conta de débito {selecionada.contaDebitoNome}</p>
-          <p>Conta de crédito {selecionada.contaCreditoNome}</p>
-          <p>Centro de custo {selecionada.centroNome}</p>
-          <p>Tipo de ocorrência {selecionada.tipoEventoRotulo}</p>
-          <p>Início de vigência {dataBr(selecionada.vigenciaInicio)}</p>
-          <p>Situação {selecionada.situacaoRotulo}</p>
-          <p>Empresa —</p>
-          <p>Responsável {selecionada.responsavelNome}</p>
-          <p>Vinculado a cadastro existente; seleção obrigatória no formulário.</p>
-          <p>Valor pertencente ao conjunto de opções do domínio.</p>
-          <Button type="button" variant="secondary" onClick={abrirEditar}>Editar versão</Button>
-          <Button type="button" variant="secondary" onClick={() => void abrirHistorico('Histórico')}>Consultar histórico</Button>
-          <Button type="button" variant="secondary" onClick={() => void validar()}>Validar pré-condições</Button>
-        </section>
-      ) : null}
-      {aba === 'Movimentações' ? (
-        <table>
-          <thead>
-            <tr><th>Acontecimento</th><th>Origem</th><th>Efeito</th><th>Situação</th></tr>
-          </thead>
-          <tbody>
-            {historico.map((evento) => (
-              <tr key={`${evento.quando}-${evento.acontecimento}`}>
-                <td>{evento.acontecimento}</td>
-                <td>{evento.quem}</td>
-                <td>{evento.justificativa}</td>
-                <td>{selecionada?.situacaoRotulo}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : null}
-      {aba === 'Regras e validações' ? <p>origem imutável, não lançar sem mapeamento correto, balanceamento exato</p> : null}
-      {aba === 'Exceções' ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>) : null}
-      {aba === 'Histórico' ? (
-        <ul>
-          {historico.map((evento) => (
-            <li key={`${evento.quando}-${evento.acontecimento}`}>
-              {evento.acontecimento} {dataBr(evento.quando)} {evento.quem}
-            </li>
+      <Card>
+        <CardHeader><CardTitle><h2>Ações do domínio — previstas no contrato completo</h2></CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {acoesDominio.map((acao, indice) => (
+            <Button key={acao.rotulo} type="button" variant={indice === 0 ? 'default' : 'secondary'} onClick={acao.abrir}>{acao.rotulo}</Button>
           ))}
-        </ul>
-      ) : null}
-      {aba === 'Integrações' ? <p>Esta tela não chama serviço externo.</p> : null}
-      {aba === 'Aceite e testes' ? (
-        <ul>
-          {ACEITE.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      ) : null}
-      <p>Enquadramento fiscal</p>
-      <p>—</p>
+        </CardContent>
+      </Card>
 
-      {drawer === 'criar' || drawer === 'editar' ? (
-        <section>
-          <h2>Dados principais</h2>
-          <label>
-            Conta de débito
-            <select aria-label="Conta de débito" value={form.contaDebitoCodigo} onChange={(evento) => setForm({ ...form, contaDebitoCodigo: evento.target.value })}>
-              <option value="">Selecione conta de débito</option>
-              {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
-            </select>
-          </label>
-          <label>
-            Conta de crédito
-            <select aria-label="Conta de crédito" value={form.contaCreditoCodigo} onChange={(evento) => setForm({ ...form, contaCreditoCodigo: evento.target.value })}>
-              <option value="">Selecione conta de crédito</option>
-              {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
-            </select>
-          </label>
-          <label>
-            Centro de custo
-            <select aria-label="Centro de custo" value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
-              <option value="">Selecione centro de custo</option>
-              {centrosVisiveis.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
-            </select>
-          </label>
-          <p>Seleção vinculada ao cadastro; sem digitar identificadores.</p>
-          <Button type="button" variant="secondary" onClick={() => {
-            if (contas.length === 0 && centros.length === 0) {
-              setAviso('Nenhum cadastro disponível para seleção. Consulte a área responsável.');
-            }
-          }}>Pesquisar</Button>
-          <label>
-            Tipo de ocorrência
-            <select aria-label="Tipo de ocorrência" value={form.tipoEvento} disabled={drawer === 'editar'} onChange={(evento) => setForm({ ...form, tipoEvento: evento.target.value })}>
-              <option value="">Selecione tipo de ocorrência</option>
-              {TIPOS.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
-            </select>
-          </label>
-          <label>
-            Competência
-            <input aria-label="Competência" type="month" required value={form.competencia} disabled={drawer === 'editar'} onChange={(evento) => setForm({ ...form, competencia: evento.target.value })} />
-          </label>
-          <label>
-            Enquadramento fiscal
-            <select aria-label="Enquadramento fiscal" disabled value="">
-              <option value="">—</option>
-            </select>
-            <BadgeProvisorio texto="Provisório" />
-          </label>
-          <label>
-            Início de vigência
-            <input aria-label="Início de vigência" type="date" required value={form.vigenciaInicio} onChange={(evento) => setForm({ ...form, vigenciaInicio: evento.target.value })} />
-          </label>
-          <label>
-            Situação
-            <select aria-label="Situação" disabled value="DRAFT">
-              <option value="DRAFT">Rascunho</option>
-            </select>
-          </label>
-          <label>
-            Justificativa auditável
-            <textarea aria-label="Justificativa auditável" value={form.justificativa} onChange={(evento) => setForm({ ...form, justificativa: evento.target.value })} />
-          </label>
-          <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
-          <Button type="button" onClick={() => void gravar()}>Configurar mappings</Button>
-        </section>
-      ) : null}
+      <AcoesProcessoSheet
+        aberto={drawer === 'processo'}
+        onFechar={() => setDrawer(null)}
+        descricao="Operações previstas para as políticas de contabilização"
+        apoio="Confirme permissões, validade, origem e efeitos contábeis antes de registrar."
+        condicionantes={['origem imutável, não lançar sem mapeamento correto, balanceamento exato', 'Exceções: mapeamento ausente, evento duplicado.']}
+        comandos={[
+          { titulo: 'Configurar mappings', rotuloAcessivel: 'Abrir decisão: Configurar mappings', abrir: abrirCriar },
+          { titulo: 'Simular evento', rotuloAcessivel: 'Abrir decisão: Simular evento', abrir: () => { setDrawer(null); abrirModal('simular'); } },
+          { titulo: 'Aprovar regra', rotuloAcessivel: 'Abrir decisão: Aprovar regra', abrir: () => { setDrawer(null); abrirModal('aprovar'); } },
+        ]}
+      />
 
-      {drawer === 'processo' ? (
-        <section>
-          <h2>Ações do processo</h2>
-          <Button type="button" onClick={abrirCriar}>Configurar mappings</Button>
-          <Button type="button" variant="secondary" onClick={() => abrirModal('simular')}>Simular evento</Button>
-          <Button type="button" variant="secondary" onClick={() => abrirModal('aprovar')}>Aprovar regra</Button>
-          <Button type="button" variant="secondary" onClick={() => setAba('Ficha e campos')}>Abrir decisão →</Button>
-        </section>
-      ) : null}
+      <Sheet open={formularioAberto} onOpenChange={(aberto) => { if (!aberto) voltar(); }}>
+        <SheetContent aria-describedby={undefined} className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[580px]">
+          <SheetHeader className="border-b border-border p-5">
+            <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Contabilidade</span>
+            <SheetTitle className="text-lg font-bold">Políticas de contabilização</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-1 flex-col gap-3 p-5">
+            <SecaoRotulo>Dados principais</SecaoRotulo>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <CampoForm rotulo="Conta de débito">
+                <select aria-label="Conta de débito" className={CONTROLE} value={form.contaDebitoCodigo} onChange={(evento) => setForm({ ...form, contaDebitoCodigo: evento.target.value })}>
+                  <option value="">Selecione conta de débito</option>
+                  {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
+                </select>
+              </CampoForm>
+              <CampoForm rotulo="Conta de crédito">
+                <select aria-label="Conta de crédito" className={CONTROLE} value={form.contaCreditoCodigo} onChange={(evento) => setForm({ ...form, contaCreditoCodigo: evento.target.value })}>
+                  <option value="">Selecione conta de crédito</option>
+                  {contasVisiveis.map((conta) => <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>)}
+                </select>
+              </CampoForm>
+              <CampoForm rotulo="Centro de custo">
+                <div className="flex items-stretch gap-1.5">
+                  <select aria-label="Centro de custo" className={`${CONTROLE} min-w-0 flex-1`} value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
+                    <option value="">Selecione centro de custo</option>
+                    {centrosVisiveis.map((centro) => <option key={centro.codigo} value={centro.codigo}>{centro.nome}</option>)}
+                  </select>
+                  <Button type="button" size="sm" variant="secondary" title="Pesquisar cadastro pelo nome" onClick={() => {
+                    if (contas.length === 0 && centros.length === 0) {
+                      setAviso('Nenhum cadastro disponível para seleção. Consulte a área responsável.');
+                    }
+                  }}>Pesquisar</Button>
+                </div>
+                <span className="mt-1 block text-[11px] text-muted-foreground">Seleção vinculada ao cadastro; sem digitar identificadores.</span>
+              </CampoForm>
+              <CampoForm rotulo="Tipo de ocorrência">
+                <select aria-label="Tipo de ocorrência" className={CONTROLE} value={form.tipoEvento} disabled={drawer === 'editar'} onChange={(evento) => setForm({ ...form, tipoEvento: evento.target.value })}>
+                  <option value="">Selecione tipo de ocorrência</option>
+                  {TIPOS.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
+                </select>
+              </CampoForm>
+              <CampoForm rotulo="Competência">
+                <input aria-label="Competência" type="month" required className={CONTROLE} value={form.competencia} disabled={drawer === 'editar'} onChange={(evento) => setForm({ ...form, competencia: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Enquadramento fiscal">
+                <span className="flex items-center gap-2">
+                  <select aria-label="Enquadramento fiscal" className={`${CONTROLE} min-w-0 flex-1`} disabled value="">
+                    <option value="">—</option>
+                  </select>
+                  <BadgeProvisorio />
+                </span>
+              </CampoForm>
+              <CampoForm rotulo="Início de vigência">
+                <input aria-label="Início de vigência" type="date" required className={CONTROLE} value={form.vigenciaInicio} onChange={(evento) => setForm({ ...form, vigenciaInicio: evento.target.value })} />
+              </CampoForm>
+              <CampoForm rotulo="Situação">
+                <select aria-label="Situação" className={CONTROLE} disabled value="DRAFT">
+                  <option value="DRAFT">Rascunho</option>
+                </select>
+              </CampoForm>
+              <div className="sm:col-span-2">
+                <CampoForm rotulo="Justificativa auditável">
+                  <textarea aria-label="Justificativa auditável" rows={3} className={AREA} placeholder="Informe a justificativa ou observação operacional" value={form.justificativa} onChange={(evento) => setForm({ ...form, justificativa: evento.target.value })} />
+                </CampoForm>
+              </div>
+            </div>
+            {!modal && avisoNaTela}
+          </div>
+          <SheetFooter className="flex-row justify-end border-t border-border px-5 py-3">
+            <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
+            <Button type="button" variant="secondary" onClick={() => void validar()}>Verificar dados</Button>
+            <Button type="button" onClick={() => void gravar()}>Configurar mappings</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
-      {modal ? (
-        <section>
-          <label>
-            Justificativa / observação
-            <textarea aria-label="Justificativa / observação" value={justificativaModal} onChange={(evento) => setJustificativaModal(evento.target.value)} />
-          </label>
-          {modal === 'simular' ? (
-            <label>
-              Valor
-              <input aria-label="Valor" value={valorTexto} onChange={(evento) => setValorTexto(evento.target.value)} />
-            </label>
-          ) : null}
-          <Button type="button" disabled={enviando} onClick={() => void confirmarLoteOuAcao(modal)}>Confirmar</Button>
-        </section>
-      ) : null}
-    </>
+      <Dialog open={modal !== null} onOpenChange={(aberto) => { if (!aberto) setModal(null); }}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Ação do domínio: {modal === 'simular' ? 'Simular evento' : 'Aprovar regra'}</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 px-4">
+            {modal === 'simular' ? (
+              <CampoForm rotulo="Valor">
+                <span className="flex items-center overflow-hidden rounded-md border border-border-strong">
+                  <span aria-hidden="true" className="bg-surface-2 px-2 py-1.5 text-[11px] text-muted-foreground">R$</span>
+                  <input aria-label="Valor" inputMode="decimal" placeholder="0,00" autoComplete="off" className="h-8 min-w-0 flex-1 px-2 text-xs outline-none" value={valorTexto} onChange={(evento) => setValorTexto(evento.target.value)} />
+                </span>
+              </CampoForm>
+            ) : null}
+            <CampoForm rotulo="Justificativa / observação">
+              <textarea aria-label="Justificativa / observação" rows={3} className={AREA} placeholder="Registre a razão para a decisão" value={justificativaModal} onChange={(evento) => setJustificativaModal(evento.target.value)} />
+            </CampoForm>
+            {avisoNaTela}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setModal(null)}>Cancelar</Button>
+            <Button type="button" disabled={enviando} onClick={() => modal && void confirmarLoteOuAcao(modal)}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/** Campo da ficha com a dica do protótipo abaixo do valor (cadastro vinculado ou opção do domínio). */
+function CampoDica({ label, dica, children }: { label: string; dica: string; children: ReactNode }) {
+  return (
+    <div>
+      <Campo label={label}>{children}</Campo>
+      <span className="mt-1 block text-[11px] text-muted-foreground">{dica}</span>
+    </div>
   );
 }
