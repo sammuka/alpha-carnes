@@ -17,7 +17,10 @@ O projeto está em **implementação ativa** (fases F1–F6a concluídas; Ciclo 
 - **Governança vigente:** [`docs/governance/constituicao.md`](docs/governance/constituicao.md)
   (princípios inegociáveis — fidelidade ao protótipo e completude E2E),
   [`docs/governance/roadmap-canonico.md`](docs/governance/roadmap-canonico.md) §8 (Ciclo v1.1, ondas 0–10),
-  [`docs/governance/pipeline-execucao.md`](docs/governance/pipeline-execucao.md) (rito Portão 1/Portão 2),
+  [`docs/governance/pipeline-execucao.md`](docs/governance/pipeline-execucao.md) (**rito v2 — AD-41**:
+  Portão 1 com checklist fixo de 10 itens; Gate único por PR com conformidade + ataque de domínio;
+  BLOQUEANTE fechado em seis classes; veredito como comentário no PR; Playwright só via `npm run e2e:ci`),
+  [`docs/execucao/DECISOES.md`](docs/execucao/DECISOES.md) (AD-41 substitui os itens 1, 2, 6 e 7 da AD-22),
   estado corrente em [`docs/execucao/EXECUCAO-STATUS.md`](docs/execucao/EXECUCAO-STATUS.md).
 
 ## Fontes de verdade (ordem de precedência)
