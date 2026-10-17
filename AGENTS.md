@@ -29,7 +29,7 @@ reporte o bloqueio. Nunca invente uma decisão de produto.
 - Ambiente local: frontend `localhost:4000`, backend `localhost:4001` e PostgreSQL
   `localhost:15433`; portas internas dos containers: `3000`, `3001` e `5432`.
 - Use `rg` para busca. Preserve alterações preexistentes do usuário.
-- Mantenha worktrees de onda em `.worktrees/o<N>`; nunca implemente no worktree coordenador.
+- Mantenha worktrees de fatia em `.worktrees/<fatia>`; nunca implemente no worktree coordenador.
 - Estado efêmero fica em `.codex/runtime/` e nunca é commitado.
 
 ## Regra de branching
@@ -39,7 +39,7 @@ PR (`required_pull_request_reviews`, sem force-push, sem exclusão). A única ex
 do repositório (`sammuka`, `enforce_admins: false`); qualquer outra identidade, incluindo
 agentes, é bloqueada. Todo trabalho de agente:
 
-1. Cria uma branch filha de `develop` (ou worktree dedicado, ex. `.worktrees/o<N>`) —
+1. Cria uma branch filha de `develop` (ou worktree dedicado, ex. `.worktrees/<fatia>`) —
    convenção `feature/<contexto>`, `fix/<contexto>` ou `feature/onda<N>-*`.
 2. Integra em `develop` **somente** via PR, com o CI (oito jobs canônicos) verde.
 3. Nunca usa `git push origin <branch>:develop` nem edita/comita na cópia local de `develop`.
@@ -58,7 +58,7 @@ conclui no rito anterior).
 |---|---|---|
 | `planner` | Um plano tático em `docs/superpowers/plans/` (≤ 400 linhas, sem código literal) e o PR rascunho da fatia | implementar, auditar ou mudar estado |
 | `monitor` | Comentário de veredito no PR da fatia (`gh pr comment`) | implementar, corrigir plano, mudar status ou auditar o próprio trabalho |
-| `worker` | Código/testes no worktree da fatia; corpo e comentários de relatório do PR | decidir regra, auditar, mergear ou editar `docs/execucao/` |
+| `worker` | Código/testes em `.worktrees/<fatia>`; corpo e comentários de relatório do PR | decidir regra, auditar, mergear ou editar `docs/execucao/` |
 | `executor` | Worktrees, operação de merge e `EXECUCAO-STATUS.md` (uma vez por merge) | escrever veredito, plano ou código de produto |
 
 Regras:
@@ -66,39 +66,60 @@ Regras:
 - Revisor independente do implementador: use uma nova instância `monitor` para cada rodada de
   Portão 1 e de Gate único; nunca a sessão que planejou ou implementou a fatia.
 - O Monitor forma sua conclusão antes de ler um veredito anterior da mesma fatia.
-- Modelo por tarefa (AD-41 item 9): Monitor e Planner de alto risco em `claude-opus-5.5`;
-  Worker pontual e Executor em `claude-sonnet-5.5`.
+- Modelos (AD-41 item 9): Monitor: sempre `claude-opus-5.5`. Planner: opus em fatia de alto risco, sonnet em baixo risco e ajuste textual. Worker pontual e Executor: sonnet; Worker de fatia nova ou integração com conflito: opus.
 - Correção de plano volta a uma nova instância `planner`; correção de código volta ao `worker`.
 - Veredito é comentário no PR: sem lock, sem linha em `GATE-VEREDITOS.md` (congelado até a
   AD-40) e sem Executor só para commitar docs de veredito.
+- `EXECUCAO-STATUS.md` é atualizado pelo agente que mergeia, em commit de coordenação neutra no PR (AD-22 item 5, vigente), antes do `gh pr merge --match-head-commit`; o merge usa o head desse commit, com CI 8/8 nele.
 - Divergência técnica de implementação vai na seção "Divergências" do corpo do PR, nunca em AD.
   `DECISOES.md` só recebe regra de negócio fornecida explicitamente pelo Quality Owner.
 - Falha de delegação ou indisponibilidade do agente exigido é bloqueio; o coordenador não
   assume o papel.
-- **Playwright só via `npm run e2e:ci`** (banco novo por execução, `next build && next start`,
-  seed). `next dev` não é ambiente de gate; falha vista só em `next dev` não é achado.
+- **Playwright só via `npm run e2e:ci`.** O merge de `fix/harness-e2e-ci` é pré-condição do primeiro gate único com tela (E09-T03 em diante); até lá, Playwright roda com banco descartável recriado e `next build && next start`, nunca `next dev`.
+- Pendência do rito v2: `.codex/scripts/invoke-onda.ps1`, `.codex/scripts/invoke-multionda.ps1` e `docs/governance/pipeline-reproduzivel.md` seguem o rito anterior; até adaptação, valem AGENTS.md e skills; fatias rodam em modo assistido. Os perfis `.codex/agents/*.toml` já seguem o rito v2.
 
 ## Rito por fatia
 
 1. Planner produz o plano enxuto e abre o PR rascunho da fatia com ele.
-2. `$gate-plano` delega o Portão 1 a um Monitor independente: checklist fixo de 10 itens, teto
-   de 2 rodadas, veredito como comentário no PR da fatia.
-3. `$disparar-onda` usa Executor + Worker para implementar em worktree isolado; o relatório é o
-   corpo do PR.
-4. `$gate-pr` delega o **Gate único** a novo Monitor (`claude-opus-5.5`): conformidade (CI 8/8
-   no head exato, diff vs. plano, DoD→teste, RA-01..06, migrations) e ataque de domínio
-   (invariantes, vigência, segregação, concorrência, auditoria antes/depois, RBAC dos 11 perfis,
-   UI→API→DB→evento→UI). PR só de documentação/skills: CI 8/8 + diff = escopo, sem ataque.
-5. O agente que mergeia usa `gh pr merge --match-head-commit <head aprovado>` e atualiza
-   `EXECUCAO-STATUS.md` uma vez.
+2. `$gate-plano` delega o Portão 1 a um Monitor independente: checklist fixo de 10 itens,
+   veredito como comentário no PR da fatia. Escala própria do Portão 1: `aprovado` (os 10 itens ok) ou `ajustar` (qualquer item falhando). Não há `bloqueado` nem as seis classes, que são do Gate único. Teto de 2 rodadas; na 3ª tentativa escala ao QO. Decisão de produto ausente reprova o item 6 e a saída estruturada é `requires-human`.
+3. `$disparar-onda` usa Executor + Worker para implementar em `.worktrees/<fatia>`; o relatório
+   é o corpo do PR.
+4. `$gate-pr` delega o **Gate único** a novo Monitor: conformidade (CI 8/8 no head exato, diff
+   vs. plano, DoD→teste, RA-01..06, migrations) e ataque de domínio. PR só de documentação/skills: dispensa as pré-condições de plano (Portão 1 aprovado e seções do corpo do PR); gate = CI 8/8 + diff = escopo + sem segredo + leitura de coerência quando tocar governança.
+5. O agente que mergeia faz o commit de coordenação neutra em `EXECUCAO-STATUS.md`, espera CI
+   8/8 e usa `gh pr merge --match-head-commit <head>`.
 
-Nenhuma etapa pula a anterior. **BLOQUEANTE** é fechado em seis classes: perda/corrupção de
-dado; cálculo fiscal/financeiro errado; bypass de RBAC/segregação; segredo exposto; violação de
-invariante escrito no plano; 500 em caminho de usuário. Tudo o mais é MENOR; **em dúvida, MENOR
-com justificativa**. A 2ª rodada só existe com BLOQUEANTE e audita o delta; a 3ª aprova e os
-MENORES vão para o PR de hardening do épico. Exceção ao teto só por decisão explícita do Quality
-Owner, nunca por AD delegada. Decisão de produto pendente é fail-closed: `bloqueado` /
-`requires-human`.
+Nenhuma etapa pula a anterior.
+
+Ataque de domínio do Gate único (lista mínima):
+
+1. **Invariantes do plano:** cada invariante atacado por caminho alternativo (outro endpoint, outra ordem, payload limite).
+2. **Vigência:** sobreposição, lacuna, retroatividade, pai com vigência que exclui filhas.
+3. **Segregação de funções:** autoaprovação; mesmo usuário em etapas que exigem pessoas distintas.
+4. **Concorrência:** requisições simultâneas, ordem de locks (deadlock), `FOR UPDATE`/`FOR SHARE` do pai na criação de filho, guarda de envio em voo.
+5. **Auditoria:** toda mutação crítica grava quem, quando, valor anterior e novo.
+6. **RBAC dos 11 perfis:** teste de 403 por endpoint novo; nenhuma rota sem guarda.
+7. **Caminho UI → API → DB → evento → UI:** a tela mostra o que foi gravado; lookup não grava código oculto; evento atualiza a outra tela.
+8. **Cálculo fiscal/financeiro:** o campo que deveria controlar o cálculo o controla; escala e arredondamento `NUMERIC`.
+9. **UI no DS v3:** tela usa o DS v3 e os componentes do protótipo citados no plano.
+
+Classificação do Gate único:
+
+**BLOQUEANTE** — somente estas seis classes:
+
+1. perda ou corrupção de dado;
+2. cálculo fiscal ou financeiro errado;
+3. bypass de RBAC ou de segregação de funções;
+4. segredo exposto;
+5. violação de invariante escrito no plano;
+6. erro 500 em caminho de usuário.
+
+Tudo o mais é **MENOR**. Em dúvida de severidade, MENOR com justificativa; dúvida de decisão de produto bloqueia (fail-closed).
+
+Fidelidade visual: tela sem o DS v3 ou componente do protótipo ausente = BLOQUEANTE pela classe 5 (invariante do plano/Princípio I); variante, texto literal, espaçamento = MENOR.
+
+Rodadas do Gate único: r1 completa; r2 só por delta e só se houve BLOQUEANTE; r3 por delta: se não restar BLOQUEANTE, aprova e os MENORES vão ao backlog; se restar BLOQUEANTE, escala ao QO. Exceção ao teto só por decisão explícita do QO.
 
 ## Comandos de validação
 
@@ -127,9 +148,9 @@ o watchdog persiste sem teto fixo de tentativas e mantém o lease/lock até conf
 Antes de declarar trabalho concluído:
 
 - confirme o diff e que nenhum arquivo fora do escopo foi alterado;
-- rode as verificações proporcionais ao risco (Playwright só via `npm run e2e:ci`);
+- rode as verificações proporcionais ao risco (Playwright só via `npm run e2e:ci`; o merge de `fix/harness-e2e-ci` é pré-condição do primeiro gate único com tela (E09-T03 em diante); até lá, Playwright roda com banco descartável recriado e `next build && next start`, nunca `next dev`);
 - registre o relatório no corpo do PR, com "Divergências" (ou "Nenhuma") e DoD→teste;
 - cite comandos, resultados, branch, PR e SHAs reais;
-- merge só com Gate único `aprovado` no head exato e `--match-head-commit`; depois atualize
-  `EXECUCAO-STATUS.md` uma vez;
+- merge só com Gate único `aprovado`: commit de coordenação neutra em `EXECUCAO-STATUS.md`
+  (AD-22 item 5), CI 8/8 no novo head e `--match-head-commit`;
 - deixe bloqueios e decisões humanas explícitos, sem contorno silencioso.

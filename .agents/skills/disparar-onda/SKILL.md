@@ -5,9 +5,9 @@ description: Dispara a implementação de uma fatia do AlphaCarnes após Portão
 
 # Disparar fatia (AD-41)
 
-O coordenador delega Git e worktree ao agente `executor` (`claude-sonnet-5.5`) e a implementação
-ao agente `worker`. Ele não escreve nem implementa. Critérios completos:
-`docs/governance/pipeline-execucao.md`.
+O coordenador delega Git e worktree ao agente `executor` e a implementação ao agente `worker`.
+Ele não escreve nem implementa. Critérios completos: `docs/governance/pipeline-execucao.md`.
+Modelos (AD-41 item 9): Monitor: sempre `claude-opus-5.5`. Planner: opus em fatia de alto risco, sonnet em baixo risco e ajuste textual. Worker pontual e Executor: sonnet; Worker de fatia nova ou integração com conflito: opus.
 
 ## Pré-condições do Executor
 
@@ -33,8 +33,7 @@ vereditos nem escrita em `docs/execucao/` durante a fatia: o estado só muda no 
 - Trabalhe em TDD e commite por unidade coerente.
 - Não decida regra de negócio nem amplie escopo. Pare e reporte nos critérios de parada do plano,
   quando o plano for omisso em regra ou quando um teste continuar falhando após uma correção.
-- Rode o gate local (comandos do CI) e o Playwright **somente** via `npm run e2e:ci`; `next dev`
-  não é ambiente de gate.
+- Rode o gate local (comandos do CI) e o Playwright **somente** via `npm run e2e:ci`. O merge de `fix/harness-e2e-ci` é pré-condição do primeiro gate único com tela (E09-T03 em diante); até lá, Playwright roda com banco descartável recriado e `next build && next start`, nunca `next dev`.
 - Use frontend host `4000`, backend host `4001` e PostgreSQL host `15433` (`3000`, `3001` e
   `5432` dentro dos containers).
 - Escreva o relatório no **corpo do PR** (Resumo, Divergências, Evidências, DoD → teste,
@@ -52,9 +51,11 @@ explícita de paths exclusivos. Contratos compartilhados precisam estar mergeado
 
 Depois do Gate único `aprovado` (comentário no PR, via `$gate-pr`), o agente que mergeia:
 
-1. `gh pr merge <n> --squash --match-head-commit <head aprovado>`.
-2. Atualiza `docs/execucao/EXECUCAO-STATUS.md` **uma vez** (linha da fatia: `mergeada`, PR, SHA
-   do merge), por PR de coordenação ou junto do próximo PR da fatia seguinte.
+1. Faz o commit de coordenação neutra que altera só `docs/execucao/EXECUCAO-STATUS.md` (linha
+   da fatia: `mergeada`, PR) no PR (AD-22 item 5, vigente).
+2. Espera CI 8/8 no novo head e roda `gh pr merge <n> --squash --match-head-commit <novo head>`.
+
+`EXECUCAO-STATUS.md` é atualizado pelo agente que mergeia, em commit de coordenação neutra no PR (AD-22 item 5, vigente), antes do `gh pr merge --match-head-commit`; o merge usa o head desse commit, com CI 8/8 nele.
 
 Em bloqueio, preserve o worktree e reporte o ponto exato; não corrija o plano.
 
