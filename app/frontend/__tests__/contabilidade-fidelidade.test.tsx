@@ -40,7 +40,24 @@ const telas = [
   },
 ];
 
-describe.each(telas)('grade contábil responsiva: $nome', ({ montar, colunas }) => {
+describe.each(telas)('fidelidade ao protótipo e à E01: $nome', ({ montar, colunas }) => {
+  it('+ Novo registro é secundário e só Ações do processo é primário', () => {
+    montar();
+    expect(screen.getByRole('button', { name: '+ Novo registro' })).toHaveClass('bg-card');
+    expect(screen.getByRole('button', { name: '+ Novo registro' })).not.toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Ações do processo' })).toHaveClass('bg-primary');
+  });
+
+  it('KPIs trazem as dicas do protótipo e o tom da E01', () => {
+    montar();
+    const revisao = screen.getByText('Em revisão').parentElement!;
+    expect(within(revisao).getByText('Exigem decisão humana')).toBeInTheDocument();
+    expect(revisao.querySelector('.text-warning-fg')).not.toBeNull();
+    const bloqueados = screen.getByText('Bloqueados').parentElement!;
+    expect(within(bloqueados).getByText('Não gerar sucesso falso')).toBeInTheDocument();
+    expect(bloqueados.querySelector('.text-danger-fg')).not.toBeNull();
+  });
+
   it('abaixo de 800px a própria linha vira cartão: sem bloco escondido, sem <style>, cada célula com o rótulo da coluna', () => {
     const { container } = montar();
     expect(container.querySelector('style')).toBeNull();

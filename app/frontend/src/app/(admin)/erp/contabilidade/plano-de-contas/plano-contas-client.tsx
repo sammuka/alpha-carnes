@@ -640,12 +640,12 @@ export function PlanoContasClient({ inicial, totalInicial = inicial.length, cont
         )}
       >
         <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
-        <Button type="button" onClick={abrirCriar}>+ Novo registro</Button>
+        <Button type="button" variant="secondary" onClick={abrirCriar}>+ Novo registro</Button>
         <Button type="button" onClick={() => setProcesso(true)}>Ações do processo <ChevronDown aria-hidden="true" /></Button>
       </PageHeader>
       <KpiStrip>
-        <Kpi label="Em revisão" value={contagens?.revisao ?? '—'} />
-        <Kpi label="Bloqueados" value={contagens?.suspensos ?? '—'} />
+        <Kpi label="Em revisão" value={contagens?.revisao ?? '—'} hint="Exigem decisão humana" tone="alert" />
+        <Kpi label="Bloqueados" value={contagens?.suspensos ?? '—'} hint="Não gerar sucesso falso" tone="danger" />
       </KpiStrip>
       {!modal && !drawer && avisoNaTela}
       <div className="grid grid-cols-1 items-start gap-3.5 min-[1250px]:grid-cols-[minmax(0,1.34fr)_minmax(340px,1fr)]">
