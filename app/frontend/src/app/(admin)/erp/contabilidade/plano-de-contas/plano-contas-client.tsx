@@ -256,6 +256,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     const itens = corpo.itens ?? [];
     setContas(itens);
     setTotal(corpo.total ?? itens.length);
+    // A lista mudou (página, filtro, ordenação ou gravação): marcas de outra visão não seguem para o lote.
+    setMarcadas([]);
     setCodigoSelecionado((atual) => itens.some((item) => item.codigo === atual) ? atual : (itens[0]?.codigo ?? ''));
   }
 
@@ -518,8 +520,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
       setAviso(await lerMensagem(resposta));
       return;
     }
-    const blob = new Blob([await resposta.text()], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
+    // blob, não text(): text() descarta o BOM e o Excel perde os acentos.
+    const url = URL.createObjectURL(await resposta.blob());
     const link = document.createElement('a');
     link.href = url;
     link.download = 'plano-de-contas.csv';

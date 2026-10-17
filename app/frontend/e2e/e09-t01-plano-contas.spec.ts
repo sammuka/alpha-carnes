@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { limparPlano } from './limpar-plano';
 
@@ -207,6 +208,25 @@ test.describe('Plano de contas', () => {
     await page.getByRole('tab', { name: 'Exceções', exact: true }).click();
     await expect(page.getByText('Bloqueio / exceção: Conta desativada.')).toBeVisible();
     await expect(page.getByText('Bloqueio / exceção: Mudança de classificação após fechamento.')).toBeVisible();
+    await page.close();
+  });
+
+  test('Exportar visão baixa o CSV com o BOM UTF-8 e o nome do arquivo', async () => {
+    const page = await adminContext.newPage();
+    await abrirPlano(page);
+    await criarCentro(page);
+    await criarConta(page, { codigo: '1', nome: 'Grupo do ativo', classificacao: 'sintética', pai: null });
+    const baixando = page.waitForEvent('download');
+    const exportacao = page.waitForResponse((resposta) => new URL(resposta.url()).pathname === '/api/contabilidade/plano/exportar');
+    await page.getByRole('button', { name: 'Exportar visão', exact: true }).click();
+    const resposta = await exportacao;
+    expect(resposta.headers()['content-type']).toContain('text/csv');
+    expect(resposta.headers()['content-disposition']).toBe('attachment; filename="plano-de-contas.csv"');
+    const download = await baixando;
+    expect(download.suggestedFilename()).toBe('plano-de-contas.csv');
+    const bytes = await readFile(await download.path());
+    expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(bytes.toString('utf8')).toContain('Grupo do ativo');
     await page.close();
   });
 

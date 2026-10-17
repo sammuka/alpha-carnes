@@ -34,6 +34,7 @@ export class PlanoContasController {
 
   @Get('plano/exportar')
   @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="plano-de-contas.csv"')
   @RequirePermissoes('CONTABILIDADE_PLANO_LER')
   exportar(@Query(new ZodValidationPipe(listarPlanoSchema)) query: ListarPlanoQuery) {
     return this.plano.exportarCsv(query);

@@ -565,6 +565,19 @@ describe('Plano de contas', () => {
     await expect(service.obter('ausente')).rejects.toMatchObject({ status: 404 });
   });
 
+  it('o endpoint de exportação devolve text/csv com o nome do arquivo e o BOM', async () => {
+    const res = await request(srv()).get('/contabilidade/plano/exportar?ordenar=contaContabil&direcao=asc')
+      .set('Cookie', adminCookies).buffer(true).parse((resposta, pronto) => {
+        const partes: Buffer[] = [];
+        resposta.on('data', (parte: Buffer) => partes.push(parte));
+        resposta.on('end', () => pronto(null, Buffer.concat(partes)));
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toBe('attachment; filename="plano-de-contas.csv"');
+    expect([...(res.body as Buffer).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  });
+
   it('não devolve uuid na listagem', async () => {
     const res = await request(srv()).get('/contabilidade/plano').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
