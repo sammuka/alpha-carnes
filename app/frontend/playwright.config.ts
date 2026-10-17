@@ -48,7 +48,8 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  // E2E_EXTERNAL=1: o `npm run e2e:ci` já subiu backend + `next start`; o Playwright não sobe nada.
+  webServer: process.env.E2E_EXTERNAL === '1' ? undefined : {
     command: 'npx next dev --webpack --port 3100',
     url: frontendUrl,
     reuseExistingServer: !process.env.CI,

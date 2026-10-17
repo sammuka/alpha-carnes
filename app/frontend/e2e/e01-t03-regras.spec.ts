@@ -187,7 +187,7 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
   test.setTimeout(300_000);
 
   test('jornada: rascunho, segregação, versão, comparação e CFOP divergente', async ({ browser, request, baseURL }) => {
-    liberarCodigosDaJornada();
+    await liberarCodigosDaJornada();
     const usuarios = await prepararUsuarios(request);
     const cookieA = await loginApi(request, usuarios.adminA);
     const cookieB = await loginApi(request, usuarios.adminB);

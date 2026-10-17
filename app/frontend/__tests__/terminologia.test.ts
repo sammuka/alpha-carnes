@@ -1,5 +1,6 @@
 import ts from 'typescript';
-import { readFileSync, readdirSync, globSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, globSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 function fontes(dir: string): string[] {
@@ -34,6 +35,26 @@ function hitsTermoBanido(files: string[]): string[] {
   return hits;
 }
 
+/** Identificador técnico vazando na UI: UUID ou código de tarefa interna (E01-T03). */
+const TECNICOS = [/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, /\bE\d{2}-T\d{2}\b/];
+
+function hitsTecnicos(file: string, texto = readFileSync(file, 'utf8')): string[] {
+  const sf = ts.createSourceFile(file, texto, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const hits: string[] = [];
+  const visit = (node: ts.Node): void => {
+    // comentários não são nós da AST: ficam fora por construção
+    if (ts.isStringLiteralLike(node) || ts.isJsxText(node) || ts.isTemplateExpression(node)) {
+      const valor = node.getText(sf);
+      if (TECNICOS.some((padrao) => padrao.test(valor))) {
+        hits.push(`${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
+}
+
 const ALVOS_GESTAO = globSync('src/{app/(admin)/gestao,components/gestao}/**/*.{ts,tsx}', {
   cwd: process.cwd(),
   windowsPathsNoEscape: true,
@@ -51,6 +72,28 @@ describe('terminologia', () => {
       const conteudo = readFileSync(file, 'utf8');
       const semExcecaoAd13 = conteudo.replaceAll('Nome Fantasia/Marca', 'Nome Fantasia');
       expect(semExcecaoAd13).not.toMatch(/\bmarca\b/i);
+    }
+  });
+
+  it('strings JSX/TSX não expõem UUID nem código de tarefa interna (fixture ruim reprova)', () => {
+    const ruim = [
+      '// E01-T03: comentário pode citar a tarefa',
+      'export const A = () => (',
+      '  <p title="0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b">Regra E01-T03</p>',
+      ');',
+    ].join('\n');
+    expect(hitsTecnicos('fixture.tsx', ruim)).toEqual(['fixture.tsx:3', 'fixture.tsx:3']);
+    expect(fontes('src').filter((f) => f.endsWith('.tsx')).flatMap((f) => hitsTecnicos(f))).toEqual([]);
+  });
+
+  it('o lint do termo banido reprova fixture com Marca isolada', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'harness-terminologia-'));
+    const arquivo = join(dir, 'fixture.tsx');
+    writeFileSync(arquivo, 'export const A = () => <label>Marca</label>;');
+    try {
+      expect(hitsTermoBanido([arquivo])).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

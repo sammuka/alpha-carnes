@@ -18,10 +18,12 @@
     "@types/react-dom": "19.2.7"
   },
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && npm run lint:achados",
+    "lint:achados": "node scripts/lint-achados.mjs --warn",
     "test:ci-scripts": "node --test scripts/*.test.mjs",
     "type-check": "npm run type-check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "e2e:ci": "node scripts/e2e-ci.mjs"
   }
 }

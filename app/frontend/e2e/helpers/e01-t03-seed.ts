@@ -4,10 +4,8 @@
  * entram por INSERT: a jornada grava os dois pelo diálogo; o apoio de
  * acessibilidade usa o POST do catálogo e reaproveita a linha se ela já existe.
  */
-import { execFileSync } from 'node:child_process';
 import type { APIRequestContext } from '@playwright/test';
 import {
-  bancoDeTeste,
   criarBase,
   entrarNoFrontend,
   loginApi,
@@ -17,6 +15,7 @@ import {
   type UsuariosE01,
 } from './e01-t02-seed';
 import { BACKEND_URL } from './onda6-seed';
+import { executarSql } from './banco';
 
 export {
   entrarNoFrontend,
@@ -170,14 +169,10 @@ export async function criarRegrasEmLote(
 }
 
 /** Libera os códigos da jornada para o diálogo criar de novo. Não insere linha. */
-export function liberarCodigosDaJornada(): void {
+export async function liberarCodigosDaJornada(): Promise<void> {
   const sql = [
     `UPDATE beneficios_fiscais SET deleted_at = now() WHERE codigo = '${CODIGO_BENEFICIO}' AND deleted_at IS NULL;`,
     `UPDATE classificacoes_ibs_cbs SET deleted_at = now() WHERE codigo = '${CODIGO_CLASSIFICACAO}' AND deleted_at IS NULL;`,
   ].join(' ');
-  execFileSync('docker', [
-    'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
-    '-v', 'ON_ERROR_STOP=1', '-c', sql,
-  ], { stdio: 'pipe' });
+  await executarSql(sql);
 }
